@@ -4,10 +4,11 @@ import sqlite3 as sql
 import sys
 import hashlib
 import psycopg2
+from config import config;
 
-DB_NAME = "bloodedguild"
-USER = "***REMOVED***"
-PASSWORD = "***REMOVED***"
+DB_NAME = config["db_name"]
+USER = config["username"]
+PASSWORD = config["password"]
 
 app = Flask(__name__)
 api = Api(app)
