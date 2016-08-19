@@ -1,4 +1,3 @@
-config.py
 bloodedguild_forums_api/*.pyc
 bloodedguild_forums_api/__pycache__
 bloodedguild_forums_api.egg-info/
