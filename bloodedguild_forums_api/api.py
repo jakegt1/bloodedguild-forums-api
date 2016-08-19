@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, request, make_response
+from flask_jwt import JWT, jwt_required, current_identity
 from flask_restful import Resource, Api, abort
 import sqlite3 as sql
 import sys
@@ -12,8 +13,25 @@ DB_NAME = config["db_name"]
 USER = config["username"]
 PASSWORD = config["password"]
 
+class User(object):
+    def __init__(self, id, username):
+        self.id = id
+        self.username = username
+
+def authenticate(username, password):
+    auth_db = DatabaseAuth()
+    check_auth = auth_db.check_auth(username, password)
+    if check_auth:
+        return User(check_auth[0], check_auth[3])
+
+def identity(payload):
+    return payload['identity']
+
 app = Flask(__name__)
+app.config['SECRET_KEY'] = config["secret"]
 api = Api(app)
+
+jwt = JWT(app, authenticate, identity)
 
 class ValidatorResource(Resource):
     def __init__(self, required_fields=[]):
@@ -98,7 +116,6 @@ class DefaultLocation(Resource):
 
 
 class Forums(ValidatorResource):
-
     def get(self):
         return {
             'type': 'forums',
@@ -135,6 +152,11 @@ class ForumsPost(ValidatorResource):
             'id': post_id,
             'thread_id': thread_id
         }
+
+@app.route('/protected')
+@jwt_required()
+def protected():
+    return '[%s]' % current_identity
 
 api.add_resource(DefaultLocation, '/')
 forums_required_fields = ([["title","category_id", "subcategory_id"]])

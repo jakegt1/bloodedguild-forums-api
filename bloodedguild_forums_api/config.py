@@ -1,5 +1,6 @@
 config = {
-    "db_name": "your_db_name",
-    "username": "your_db_username",
-    "password": "your_db_password"
+    "db_name": "bloodedguild",
+    "username": "your_db_user",
+    "password": "your_db_password",
+    "secret": "your_jwt_secret"
 }
