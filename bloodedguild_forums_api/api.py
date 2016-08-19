@@ -4,6 +4,8 @@ import sqlite3 as sql
 import sys
 import hashlib
 import psycopg2
+import psycopg2.extras
+from psycopg2.extras import DictCursor
 from config import config;
 
 DB_NAME = config["db_name"]
@@ -53,13 +55,41 @@ class DatabaseConnector():
             USER,
             PASSWORD
         )
+        self.open()
 
     def get_conn_string(self):
-        return str(db_string_constructor)
+        return str(self.db_string_constructor)
 
-    def make_connection(self):
-        connection = psycopg2.connect(self.get_conn_string())
-        return connection.cursor()
+    def get_cursor(self):
+        return self.connection.cursor()
+
+    def close(self):
+        self.connection.commit()
+        self.connection.close()
+
+    def open(self):
+        self.connection = psycopg2.connect(
+            self.get_conn_string(),
+            cursor_factory=DictCursor
+        )
+
+class DatabaseAuth():
+    def __init__(self):
+        self.db = DatabaseConnector()
+
+    def check_auth(self, username, password):
+        psql_cursor = self.db.get_cursor()
+        sql_string = "select * from users "
+        sql_string += "where username = %s"
+        sql_string += "and password_hash = crypt(%s, password_hash);"
+        psql_cursor.execute(
+            sql_string,
+            (username, password)
+        )
+        query_result = psql_cursor.fetchone()
+        psql_cursor.close()
+        self.db.close()
+        return query_result
 
 
 class DefaultLocation(Resource):
