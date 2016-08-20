@@ -228,27 +228,37 @@ class ForumsAddPost(ValidatorResource):
         new_id = psql_cursor.fetchone()[0]
         psql_cursor.close()
         db.close()
-        print("wtf")
         return {
-            'thread': 1,
+            'thread': thread_id,
             'type': 'post',
             'id': new_id,
             'status': 'created'
         }
 
 
-class ForumsPost(ValidatorResource):
+class ForumsPost(Resource):
     def get(self, thread_id, post_id):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select * from posts "
+        sql_string += "where id=%s and thread_id = %s;"
+        psql_cursor.execute(
+            sql_string,
+            (post_id, thread_id)
+        )
+        forum_post = psql_cursor.fetchone()
+        psql_cursor.close()
+        db.close()
+        if(not forum_post):
+            abort(404, message={"error": "Post given did not exist."})
         return {
             'type': 'post',
             'id': post_id,
-            'thread_id': thread_id
+            'content': forum_post[1],
+            'timestamp': forum_post[2],
+            'user_id': forum_post[4]
         }
 
-@app.route('/protected')
-@jwt_required()
-def protected():
-    return '[%s]' % current_identity
 
 api.add_resource(DefaultLocation, '/')
 forums_required_fields = ([["title"]])
@@ -277,7 +287,10 @@ api.add_resource(
     '/forums/threads/<int:thread_id>',
     resource_class_args=threads_required_fields
 )
-api.add_resource(ForumsPost, '/forums/threads/<int:thread_id>/<int:post_id>')
+api.add_resource(
+    ForumsPost,
+    '/forums/threads/<int:thread_id>/<int:post_id>'
+)
 
 if __name__ == '__main__':
     app.run(debug=True)
