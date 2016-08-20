@@ -125,15 +125,30 @@ class DefaultLocation(Resource):
         return {'info': 'Bloodedguild forums api. Do not touch! wow!'}
 
 
+class ForumsCategoriesInfo(Resource):
+    def get(self):
+        return {'type': 'categories'}
+
+
+class ForumsSubcategoriesInfo(Resource):
+    def get(self, category_id):
+        return {'type': 'category'}
+
+
+class ForumsSpecificSubcategoryInfo(Resource):
+    def get(self, category_id, subcategory_id):
+        return {'type': 'subcategory'}
+
+
 class ForumsInfo(Resource):
     def get(self):
         return {
             'type': 'forums',
         }
 
-class Forums(ValidatorResource):
+class ForumsAddThread(ValidatorResource):
     method_decorators = [jwt_required()]
-    def put(self):
+    def put(self, category_id, subcategory_id):
         json_data = self.validate_json(request.get_json())
         db = DatabaseConnector()
         sql_string = "insert into threads "
@@ -150,8 +165,8 @@ class Forums(ValidatorResource):
                 sql_string,
                 (
                     json_data["title"],
-                    json_data["subcategory_id"],
-                    json_data["category_id"],
+                    subcategory_id,
+                    category_id,
                     current_identity.id
                 )
             )
@@ -169,7 +184,7 @@ class Forums(ValidatorResource):
 
 
 
-class ForumsThreadInfo(ValidatorResource):
+class ForumsThread(ValidatorResource):
     def get(self, thread_id):
         return {
             'type': 'thread',
@@ -177,7 +192,7 @@ class ForumsThreadInfo(ValidatorResource):
         }
 
 
-class ForumsThread(ValidatorResource):
+class ForumsAddPost(ValidatorResource):
     method_decorators = [jwt_required()]
     def put(self, thread_id):
         json_data = self.validate_json(request.get_json())
@@ -236,21 +251,33 @@ def protected():
     return '[%s]' % current_identity
 
 api.add_resource(DefaultLocation, '/')
-forums_required_fields = ([["title","category_id", "subcategory_id"]])
+forums_required_fields = ([["title"]])
 threads_required_fields = ([["content"]])
 api.add_resource(
-    Forums,
-    '/forums',
+    ForumsCategoriesInfo,
+    '/forums/categories'
+)
+api.add_resource(
+    ForumsSubcategoriesInfo,
+    '/forums/categories/<int:category_id>'
+)
+api.add_resource(
+    ForumsSpecificSubcategoryInfo,
+    '/forums/categories/<int:category_id>/<int:subcategory_id>'
+)
+api.add_resource(
+    ForumsAddThread,
+    '/forums/categories/<int:category_id>/<int:subcategory_id>',
     resource_class_args=forums_required_fields
 )
 api.add_resource(ForumsInfo,'/forums')
-api.add_resource(ForumsThreadInfo, '/forums/<int:thread_id>')
+api.add_resource(ForumsThread, '/forums/threads/<int:thread_id>')
 api.add_resource(
-    ForumsThread,
-    '/forums/<int:thread_id>',
+    ForumsAddPost,
+    '/forums/threads/<int:thread_id>',
     resource_class_args=threads_required_fields
 )
-api.add_resource(ForumsPost, '/forums/<int:thread_id>/<int:post_id>')
+api.add_resource(ForumsPost, '/forums/threads/<int:thread_id>/<int:post_id>')
 
 if __name__ == '__main__':
     app.run(debug=True)
