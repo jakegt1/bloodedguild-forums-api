@@ -5,7 +5,6 @@ import sqlite3 as sql
 import sys
 import hashlib
 import psycopg2
-import psycopg2.extras
 from psycopg2.extras import DictCursor
 from config import config;
 
@@ -25,7 +24,18 @@ def authenticate(username, password):
         return User(check_auth[0], check_auth[3])
 
 def identity(payload):
-    return payload['identity']
+    db = DatabaseConnector()
+    psql_cursor = db.get_cursor()
+    sql_string = "select id, username from users "
+    sql_string += "where id = %s"
+    psql_cursor.execute(
+        sql_string,
+        (payload["identity"],)
+    )
+    user_data = psql_cursor.fetchone()
+
+    print(user_data)
+    return User(user_data[0], user_data[1])
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config["secret"]
@@ -115,35 +125,68 @@ class DefaultLocation(Resource):
         return {'info': 'Bloodedguild forums api. Do not touch! wow!'}
 
 
-class Forums(ValidatorResource):
+class ForumsInfo(Resource):
     def get(self):
         return {
             'type': 'forums',
         }
 
+
+class Forums(ValidatorResource):
+    method_decorators = [jwt_required()]
     def put(self):
         json_data = self.validate_json(request.get_json())
+        db = DatabaseConnector()
+        sql_string = "insert into threads "
+        sql_string += "("
+        sql_string += "title, "
+        sql_string += "subcategory_id, "
+        sql_string += "category_id, "
+        sql_string += "user_id"
+        sql_string += ") "
+        sql_string += "VALUES (%s, %s, %s, %s) RETURNING id;"
+        psql_cursor = db.get_cursor()
+        try:
+            psql_cursor.execute(
+                sql_string,
+                (
+                    json_data["title"],
+                    json_data["subcategory_id"],
+                    json_data["category_id"],
+                    current_identity.id
+                )
+            )
+        except psycopg2.IntegrityError:
+            abort(401, message="Error: Database failed to execute insert.")
+        new_id = psql_cursor.fetchone()[0]
+        psql_cursor.close()
+        db.close()
         return {
             'title': json_data["title"],
             'type': 'thread',
-            'id': 'SOME/FUCKING/ID',
+            'id': new_id,
             'status': 'created'
         }
 
 
-class ForumsThread(ValidatorResource):
+
+class ForumsThreadInfo(ValidatorResource):
     def get(self, thread_id):
         return {
             'type': 'thread',
             'id': thread_id,
         }
 
+
+class ForumsThread(ValidatorResource):
+    method_decorators = [jwt_required]
     def put(self, thread_id):
         return {
             'type': 'post',
             'thread_id': thread_id,
             'status': 'created'
         }
+
 
 class ForumsPost(ValidatorResource):
     def get(self, thread_id, post_id):
@@ -160,12 +203,19 @@ def protected():
 
 api.add_resource(DefaultLocation, '/')
 forums_required_fields = ([["title","category_id", "subcategory_id"]])
+threads_required_fields = ([["content"]])
 api.add_resource(
     Forums,
     '/forums',
     resource_class_args=forums_required_fields
 )
-api.add_resource(ForumsThread, '/forums/<int:thread_id>')
+api.add_resource(ForumsInfo,'/forums')
+api.add_resource(
+    ForumsThread,
+    '/forums/<int:thread_id>',
+    resource_class_args=threads_required_fields
+)
+api.add_resource(ForumsThreadInfo, '/forums/<int:thread_id>')
 api.add_resource(ForumsPost, '/forums/<int:thread_id>/<int:post_id>')
 
 if __name__ == '__main__':
