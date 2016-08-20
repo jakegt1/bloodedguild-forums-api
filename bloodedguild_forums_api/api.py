@@ -131,7 +131,6 @@ class ForumsInfo(Resource):
             'type': 'forums',
         }
 
-
 class Forums(ValidatorResource):
     method_decorators = [jwt_required()]
     def put(self):
@@ -179,11 +178,46 @@ class ForumsThreadInfo(ValidatorResource):
 
 
 class ForumsThread(ValidatorResource):
-    method_decorators = [jwt_required]
+    method_decorators = [jwt_required()]
     def put(self, thread_id):
+        json_data = self.validate_json(request.get_json())
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select COUNT(*) from posts "
+        sql_string += "WHERE thread_id=%s;"
+        psql_cursor.execute(
+            sql_string,
+            (thread_id,)
+        )
+        post_id = psql_cursor.fetchone()[0] + 1
+        sql_string = "insert into posts "
+        sql_string += "("
+        sql_string += "id, "
+        sql_string += "content, "
+        sql_string += "thread_id, "
+        sql_string += "user_id"
+        sql_string += ") "
+        sql_string += "VALUES (%s, %s, %s, %s) RETURNING id;"
+        try:
+            psql_cursor.execute(
+                sql_string,
+                (
+                    post_id,
+                    json_data["content"],
+                    thread_id,
+                    current_identity.id
+                )
+            )
+        except psycopg2.IntegrityError:
+            abort(401, message="Error: Database failed to execute insert.")
+        new_id = psql_cursor.fetchone()[0]
+        psql_cursor.close()
+        db.close()
+        print("wtf")
         return {
+            'thread': 1,
             'type': 'post',
-            'thread_id': thread_id,
+            'id': new_id,
             'status': 'created'
         }
 
@@ -210,12 +244,12 @@ api.add_resource(
     resource_class_args=forums_required_fields
 )
 api.add_resource(ForumsInfo,'/forums')
+api.add_resource(ForumsThreadInfo, '/forums/<int:thread_id>')
 api.add_resource(
     ForumsThread,
     '/forums/<int:thread_id>',
     resource_class_args=threads_required_fields
 )
-api.add_resource(ForumsThreadInfo, '/forums/<int:thread_id>')
 api.add_resource(ForumsPost, '/forums/<int:thread_id>/<int:post_id>')
 
 if __name__ == '__main__':
