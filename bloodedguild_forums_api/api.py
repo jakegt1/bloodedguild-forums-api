@@ -1,7 +1,9 @@
 from flask import Flask, jsonify, request, make_response
 from flask_jwt import JWT, jwt_required, current_identity
 from flask_restful import Resource, Api, abort
+from datetime import datetime
 import sqlite3 as sql
+import re
 import sys
 import hashlib
 import psycopg2
@@ -236,8 +238,18 @@ class ForumsAddPost(ValidatorResource):
         }
 
 
+def construct_post_object(forum_post):
+    return {
+            'type': 'post',
+            'id': forum_post[0],
+            'content': forum_post[1],
+            'timestamp': forum_post[2].isoformat(),
+            'user_id': forum_post[4]
+    }
+
 class ForumsPost(Resource):
-    def get(self, thread_id, post_id):
+
+    def get_post(self, thread_id, post_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         sql_string = "select * from posts "
@@ -250,14 +262,55 @@ class ForumsPost(Resource):
         psql_cursor.close()
         db.close()
         if(not forum_post):
-            abort(404, message={"error": "Post given did not exist."})
-        return {
-            'type': 'post',
-            'id': post_id,
-            'content': forum_post[1],
-            'timestamp': forum_post[2],
-            'user_id': forum_post[4]
-        }
+            forum_post = []
+        else:
+            forum_post = [construct_post_object(forum_post)]
+        return forum_post
+
+    def get_posts(self, thread_id, post_min, post_max):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select * from posts "
+        sql_string += "where thread_id = %s and "
+        sql_string += "id >= %s and "
+        sql_string += "id <= %s;"
+        psql_cursor.execute(
+            sql_string,
+            (
+                thread_id,
+                post_min,
+                post_max
+            )
+        )
+        forum_posts = psql_cursor.fetchall()
+        print([construct_post_object(post) for post in forum_posts])
+        return [construct_post_object(post) for post in forum_posts]
+
+
+    def get(self, thread_id, post_id):
+        regex_post = re.compile(r'^\d+$')
+        regex_posts = re.compile(r'^(?P<min>\d+)-(?P<max>\d+)$')
+        response = {}
+        if(regex_post.match(post_id)):
+            response = self.get_post(thread_id, post_id)
+        elif(regex_posts.match(post_id)):
+            matches = regex_posts.match(post_id)
+            min = int(matches.group('min'))
+            max = int(matches.group('max'))
+            if(min < max):
+                response = self.get_posts(
+                    thread_id,
+                    min,
+                    max
+                )
+            else:
+                error_message = "Minimum ID given was larger than Maximum ID."
+                abort(401, message={"error": error_message})
+        else:
+            abort(401, message={"error": "post id did not match regex"})
+        return response
+
+
 
 
 api.add_resource(DefaultLocation, '/')
@@ -289,7 +342,7 @@ api.add_resource(
 )
 api.add_resource(
     ForumsPost,
-    '/forums/threads/<int:thread_id>/<int:post_id>'
+    '/forums/threads/<int:thread_id>/<string:post_id>'
 )
 
 if __name__ == '__main__':
