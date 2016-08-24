@@ -248,7 +248,6 @@ def construct_post_object(forum_post):
     }
 
 class ForumsPost(Resource):
-
     def get_post(self, thread_id, post_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
