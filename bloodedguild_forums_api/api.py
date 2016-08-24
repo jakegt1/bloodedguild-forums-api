@@ -1,7 +1,9 @@
 from flask import Flask, jsonify, request, make_response
 from flask_jwt import JWT, jwt_required, current_identity
 from flask_restful import Resource, Api, abort
+from datetime import datetime
 import sqlite3 as sql
+import re
 import sys
 import hashlib
 import psycopg2
@@ -183,13 +185,34 @@ class ForumsAddThread(ValidatorResource):
         }
 
 
-
 class ForumsThread(ValidatorResource):
-    def get(self, thread_id):
+
+    def construct_response(self, sql_query):
         return {
-            'type': 'thread',
-            'id': thread_id,
+                'type': 'post',
+                'id': sql_query[0],
+                'title': sql_query[1],
+                'timestamp': sql_query[2].isoformat(),
+                'locked': sql_query[3],
+                'user_id': sql_query[6]
         }
+
+    def get(self, thread_id):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select * from threads "
+        sql_string += "where id = %s;"
+        psql_cursor.execute(
+            sql_string,
+            (thread_id,)
+        )
+        forum_thread = psql_cursor.fetchone()
+        psql_cursor.close()
+        db.close()
+        response = []
+        if(forum_thread):
+            response = [self.construct_response(forum_thread)]
+        return response
 
 
 class ForumsAddPost(ValidatorResource):
@@ -237,7 +260,17 @@ class ForumsAddPost(ValidatorResource):
 
 
 class ForumsPost(Resource):
-    def get(self, thread_id, post_id):
+
+    def construct_response(self, sql_query):
+        return {
+                'type': 'post',
+                'id': sql_query[0],
+                'content': sql_query[1],
+                'timestamp': sql_query[2].isoformat(),
+                'user_id': sql_query[4]
+        }
+
+    def get_post(self, thread_id, post_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         sql_string = "select * from posts "
@@ -250,14 +283,56 @@ class ForumsPost(Resource):
         psql_cursor.close()
         db.close()
         if(not forum_post):
-            abort(404, message={"error": "Post given did not exist."})
-        return {
-            'type': 'post',
-            'id': post_id,
-            'content': forum_post[1],
-            'timestamp': forum_post[2],
-            'user_id': forum_post[4]
-        }
+            forum_post = []
+        else:
+            forum_post = [self.construct_response(forum_post)]
+        return forum_post
+
+    def get_posts(self, thread_id, post_min, post_max):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select * from posts "
+        sql_string += "where thread_id = %s and "
+        sql_string += "id >= %s and "
+        sql_string += "id <= %s;"
+        psql_cursor.execute(
+            sql_string,
+            (
+                thread_id,
+                post_min,
+                post_max
+            )
+        )
+        forum_posts = psql_cursor.fetchall()
+        psql_cursor.close()
+        db.close()
+        return [self.construct_response(post) for post in forum_posts]
+
+
+    def get(self, thread_id, post_id):
+        regex_post = re.compile(r'^\d+$')
+        regex_posts = re.compile(r'^(?P<min>\d+)-(?P<max>\d+)$')
+        response = {}
+        if(regex_post.match(post_id)):
+            response = self.get_post(thread_id, post_id)
+        elif(regex_posts.match(post_id)):
+            matches = regex_posts.match(post_id)
+            min = int(matches.group('min'))
+            max = int(matches.group('max'))
+            if(min < max):
+                response = self.get_posts(
+                    thread_id,
+                    min,
+                    max
+                )
+            else:
+                error_message = "Minimum ID given was larger than Maximum ID."
+                abort(401, message={"error": error_message})
+        else:
+            abort(401, message={"error": "post id did not match regex"})
+        return response
+
+
 
 
 api.add_resource(DefaultLocation, '/')
@@ -289,7 +364,7 @@ api.add_resource(
 )
 api.add_resource(
     ForumsPost,
-    '/forums/threads/<int:thread_id>/<int:post_id>'
+    '/forums/threads/<int:thread_id>/<string:post_id>'
 )
 
 if __name__ == '__main__':
