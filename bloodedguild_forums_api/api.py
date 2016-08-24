@@ -186,7 +186,6 @@ class ForumsAddThread(ValidatorResource):
 
 
 class ForumsThread(ValidatorResource):
-
     def construct_response(self, sql_query):
         return {
                 'type': 'post',
@@ -332,8 +331,22 @@ class ForumsPost(Resource):
             abort(401, message={"error": "post id did not match regex"})
         return response
 
+@jwt.auth_response_handler
+def jwt_response_handler(access_token, identity):
+    return jsonify(
+        {
+            'access_token': access_token.decode('utf-8'),
+            'username': identity.username
+        }
+    )
 
 
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
+    return response
 
 api.add_resource(DefaultLocation, '/')
 forums_required_fields = ([["title"]])
