@@ -128,9 +128,57 @@ class DefaultLocation(Resource):
 
 
 class ForumsCategoriesInfo(Resource):
-    def get(self):
-        return {'type': 'categories'}
+    def construct_subquery_response(self, sql_query):
+        return {
+            'type': 'subcategory',
+            'id': sql_query[0],
+            'title': sql_query[1],
+            'description': sql_query[2]
+        }
 
+    def construct_response(self, sql_query):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select * from subcategories "
+        sql_string += "where category_id = %s;"
+        psql_cursor.execute(
+            sql_string,
+            (sql_query[0],)
+        )
+        forum_subcategories = psql_cursor.fetchall()
+        forum_subcategories = [
+            self.construct_subquery_response(subcategory)
+            for subcategory in
+            forum_subcategories
+        ]
+        psql_cursor.close()
+        db.close()
+        return {
+                'type': 'category',
+                'id': sql_query[0],
+                'title': sql_query[1],
+                'description': sql_query[2],
+                'subcategories': forum_subcategories
+        }
+
+    def get(self):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select * from categories;"
+        psql_cursor.execute(
+            sql_string
+        )
+        forum_categories = psql_cursor.fetchall()
+        psql_cursor.close()
+        db.close()
+        response = []
+        if(forum_categories):
+            response = [
+                self.construct_response(category)
+                for category in
+                forum_categories
+            ]
+        return response
 
 class ForumsSubcategoriesInfo(Resource):
     def get(self, category_id):
@@ -178,8 +226,8 @@ class ForumsAddThread(ValidatorResource):
         psql_cursor.close()
         db.close()
         return {
-            'title': json_data["title"],
             'type': 'thread',
+            'title': json_data["title"],
             'id': new_id,
             'status': 'created'
         }
