@@ -185,13 +185,34 @@ class ForumsAddThread(ValidatorResource):
         }
 
 
-
 class ForumsThread(ValidatorResource):
-    def get(self, thread_id):
+
+    def construct_response(self, sql_query):
         return {
-            'type': 'thread',
-            'id': thread_id,
+                'type': 'post',
+                'id': sql_query[0],
+                'title': sql_query[1],
+                'timestamp': sql_query[2].isoformat(),
+                'locked': sql_query[3],
+                'user_id': sql_query[6]
         }
+
+    def get(self, thread_id):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select * from threads "
+        sql_string += "where id = %s;"
+        psql_cursor.execute(
+            sql_string,
+            (thread_id,)
+        )
+        forum_thread = psql_cursor.fetchone()
+        psql_cursor.close()
+        db.close()
+        response = []
+        if(forum_thread):
+            response = [self.construct_response(forum_thread)]
+        return response
 
 
 class ForumsAddPost(ValidatorResource):
@@ -238,16 +259,17 @@ class ForumsAddPost(ValidatorResource):
         }
 
 
-def construct_post_object(forum_post):
-    return {
-            'type': 'post',
-            'id': forum_post[0],
-            'content': forum_post[1],
-            'timestamp': forum_post[2].isoformat(),
-            'user_id': forum_post[4]
-    }
-
 class ForumsPost(Resource):
+
+    def construct_response(self, sql_query):
+        return {
+                'type': 'post',
+                'id': sql_query[0],
+                'content': sql_query[1],
+                'timestamp': sql_query[2].isoformat(),
+                'user_id': sql_query[4]
+        }
+
     def get_post(self, thread_id, post_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
@@ -263,7 +285,7 @@ class ForumsPost(Resource):
         if(not forum_post):
             forum_post = []
         else:
-            forum_post = [construct_post_object(forum_post)]
+            forum_post = [self.construct_response(forum_post)]
         return forum_post
 
     def get_posts(self, thread_id, post_min, post_max):
@@ -282,8 +304,9 @@ class ForumsPost(Resource):
             )
         )
         forum_posts = psql_cursor.fetchall()
-        print([construct_post_object(post) for post in forum_posts])
-        return [construct_post_object(post) for post in forum_posts]
+        psql_cursor.close()
+        db.close()
+        return [self.construct_response(post) for post in forum_posts]
 
 
     def get(self, thread_id, post_id):
