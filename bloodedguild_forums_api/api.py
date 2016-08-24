@@ -190,6 +190,92 @@ class ForumsSpecificSubcategoryInfo(Resource):
         return {'type': 'subcategory'}
 
 
+class ForumsSubcategoryThreads(Resource):
+    def construct_response(self, sql_query):
+        return {
+                'type': 'post',
+                'id': sql_query[0],
+                'title': sql_query[1],
+                'timestamp': sql_query[2].isoformat(),
+                'locked': sql_query[3],
+                'user_id': sql_query[6]
+        }
+
+    def get_thread(self, category_id, subcategory_id, thread_id):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        offset = int(thread_id)-1 #0 indexed
+        sql_string = "select * from threads "
+        sql_string += "where category_id = %s and "
+        sql_string += "subcategory_id = %s "
+        sql_string += "limit 1 "
+        sql_string += "offset %s;"
+        psql_cursor.execute(
+            sql_string,
+            (category_id, subcategory_id, offset)
+        )
+        forum_post = psql_cursor.fetchone()
+        psql_cursor.close()
+        db.close()
+        if(not forum_post):
+            forum_post = []
+        else:
+            forum_post = [self.construct_response(forum_post)]
+        return forum_post
+
+    def get_threads(self, category_id, subcategory_id, thread_min, thread_max):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select * from threads "
+        sql_string += "where category_id = %s and "
+        sql_string += "subcategory_id = %s "
+        sql_string += "limit %s "
+        sql_string += "offset %s;"
+        limit = thread_max-thread_min
+        offset = thread_min-1 #0 indexed
+        psql_cursor.execute(
+            sql_string,
+            (
+                category_id,
+                subcategory_id,
+                limit,
+                offset
+            )
+        )
+        forum_threads = psql_cursor.fetchall()
+        psql_cursor.close()
+        db.close()
+        return [self.construct_response(thread) for thread in forum_threads]
+
+    def get(self, category_id, subcategory_id, thread_id):
+        regex_post = re.compile(r'^\d+$')
+        regex_posts = re.compile(r'^(?P<min>\d+)-(?P<max>\d+)$')
+        response = {}
+        if(regex_post.match(thread_id)):
+            response = self.get_thread(
+                category_id,
+                subcategory_id,
+                thread_id
+            )
+        elif(regex_posts.match(thread_id)):
+            matches = regex_posts.match(thread_id)
+            min = int(matches.group('min'))
+            max = int(matches.group('max'))
+            if(min < max and min != 0):
+                response = self.get_threads(
+                    category_id,
+                    subcategory_id,
+                    min,
+                    max
+                )
+            else:
+                error_message = "Minimum ID given was larger than Maximum ID."
+                abort(401, message={"error": error_message})
+        else:
+            abort(401, message={"error": "thread id did not match regex"})
+        return response
+
+
 class ForumsInfo(Resource):
     def get(self):
         return {
@@ -307,7 +393,6 @@ class ForumsAddPost(ValidatorResource):
 
 
 class ForumsPost(Resource):
-
     def construct_response(self, sql_query):
         return {
                 'type': 'post',
@@ -410,6 +495,10 @@ api.add_resource(
 api.add_resource(
     ForumsSpecificSubcategoryInfo,
     '/forums/categories/<int:category_id>/<int:subcategory_id>'
+)
+api.add_resource(
+    ForumsSubcategoryThreads,
+    '/forums/categories/<int:category_id>/<int:subcategory_id>/<string:thread_id>'
 )
 api.add_resource(
     ForumsAddThread,
