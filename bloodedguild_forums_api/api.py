@@ -192,13 +192,25 @@ class ForumsSpecificSubcategoryInfo(Resource):
 
 class ForumsSubcategoryThreads(Resource):
     def construct_response(self, sql_query):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select COUNT(*) from posts "
+        sql_string += "where thread_id = %s;"
+        psql_cursor.execute(
+            sql_string,
+            (sql_query[0],)
+        )
+        post_count = psql_cursor.fetchone()[0]
+        psql_cursor.close()
+        db.close()
         return {
-                'type': 'thread',
-                'id': sql_query[0],
-                'title': sql_query[1],
-                'timestamp': sql_query[2].isoformat(),
-                'locked': sql_query[3],
-                'user_id': sql_query[6]
+            'type': 'thread',
+            'id': sql_query[0],
+            'title': sql_query[1],
+            'timestamp': sql_query[2].isoformat(),
+            'locked': sql_query[3],
+            'user_id': sql_query[6],
+            'post_count': post_count
         }
 
     def get_thread(self, category_id, subcategory_id, thread_id):
@@ -231,7 +243,7 @@ class ForumsSubcategoryThreads(Resource):
         sql_string += "subcategory_id = %s "
         sql_string += "limit %s "
         sql_string += "offset %s;"
-        limit = thread_max-thread_min
+        limit = (thread_max - thread_min) + 1
         offset = thread_min-1 #0 indexed
         psql_cursor.execute(
             sql_string,
@@ -320,14 +332,15 @@ class ForumsAddThread(ValidatorResource):
 
 
 class ForumsThread(ValidatorResource):
-    def construct_response(self, sql_query):
+    def construct_response(self, sql_query, post_count):
         return {
-                'type': 'post',
-                'id': sql_query[0],
-                'title': sql_query[1],
-                'timestamp': sql_query[2].isoformat(),
-                'locked': sql_query[3],
-                'user_id': sql_query[6]
+            'type': 'thread',
+            'id': sql_query[0],
+            'title': sql_query[1],
+            'timestamp': sql_query[2].isoformat(),
+            'locked': sql_query[3],
+            'user_id': sql_query[6],
+            'post_count': post_count
         }
 
     def get(self, thread_id):
@@ -340,11 +353,18 @@ class ForumsThread(ValidatorResource):
             (thread_id,)
         )
         forum_thread = psql_cursor.fetchone()
+        sql_string = "select COUNT(*) from posts "
+        sql_string += "where thread_id = %s;"
+        psql_cursor.execute(
+            sql_string,
+            (thread_id,)
+        )
+        post_count = psql_cursor.fetchone()[0]
         psql_cursor.close()
         db.close()
         response = []
         if(forum_thread):
-            response = [self.construct_response(forum_thread)]
+            response = [self.construct_response(forum_thread, post_count)]
         return response
 
 
@@ -354,33 +374,21 @@ class ForumsAddPost(ValidatorResource):
         json_data = self.validate_json(request.get_json())
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select COUNT(*) from posts "
-        sql_string += "WHERE thread_id=%s;"
-        psql_cursor.execute(
-            sql_string,
-            (thread_id,)
-        )
-        post_id = psql_cursor.fetchone()[0] + 1
         sql_string = "insert into posts "
         sql_string += "("
-        sql_string += "id, "
         sql_string += "content, "
         sql_string += "thread_id, "
         sql_string += "user_id"
         sql_string += ") "
-        sql_string += "VALUES (%s, %s, %s, %s) RETURNING id;"
-        try:
-            psql_cursor.execute(
-                sql_string,
-                (
-                    post_id,
-                    json_data["content"],
-                    thread_id,
-                    current_identity.id
-                )
+        sql_string += "VALUES (%s, %s, %s) RETURNING id;"
+        psql_cursor.execute(
+            sql_string,
+            (
+                json_data["content"],
+                thread_id,
+                current_identity.id
             )
-        except psycopg2.IntegrityError:
-            abort(401, message="Error: Database failed to execute insert.")
+        )
         new_id = psql_cursor.fetchone()[0]
         psql_cursor.close()
         db.close()
@@ -395,21 +403,24 @@ class ForumsAddPost(ValidatorResource):
 class ForumsPost(Resource):
     def construct_response(self, sql_query):
         return {
-                'type': 'post',
-                'id': sql_query[0],
-                'content': sql_query[1],
-                'timestamp': sql_query[2].isoformat(),
-                'user_id': sql_query[4]
+            'type': 'post',
+            'id': sql_query[0],
+            'content': sql_query[1],
+            'timestamp': sql_query[2].isoformat(),
+            'user_id': sql_query[4]
         }
 
     def get_post(self, thread_id, post_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
+        offset = int(post_id)-1 #offset is 0 indexed
         sql_string = "select * from posts "
-        sql_string += "where id=%s and thread_id = %s;"
+        sql_string += "where thread_id = %s "
+        sql_string += "limit 1 "
+        sql_string += "offset %s;"
         psql_cursor.execute(
             sql_string,
-            (post_id, thread_id)
+            (thread_id, offset)
         )
         forum_post = psql_cursor.fetchone()
         psql_cursor.close()
@@ -424,22 +435,23 @@ class ForumsPost(Resource):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         sql_string = "select * from posts "
-        sql_string += "where thread_id = %s and "
-        sql_string += "id >= %s and "
-        sql_string += "id <= %s;"
+        sql_string += "where thread_id = %s "
+        sql_string += "limit %s "
+        sql_string += "offset %s;"
+        limit = (post_max - post_min) + 1
+        offset = post_min - 1
         psql_cursor.execute(
             sql_string,
             (
                 thread_id,
-                post_min,
-                post_max
+                limit,
+                offset
             )
         )
         forum_posts = psql_cursor.fetchall()
         psql_cursor.close()
         db.close()
         return [self.construct_response(post) for post in forum_posts]
-
 
     def get(self, thread_id, post_id):
         regex_post = re.compile(r'^\d+$')
@@ -472,7 +484,6 @@ def jwt_response_handler(access_token, identity):
             'username': identity.username
         }
     )
-
 
 @app.after_request
 def after_request(response):
