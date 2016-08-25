@@ -186,7 +186,7 @@ class ForumsSubcategoriesInfo(Resource):
 
 
 class ForumsSpecificSubcategoryInfo(Resource):
-    def get(self, category_id, subcategory_id):
+    def get(self, subcategory_id):
         return {'type': 'subcategory'}
 
 
@@ -213,18 +213,17 @@ class ForumsSubcategoryThreads(Resource):
             'post_count': post_count
         }
 
-    def get_thread(self, category_id, subcategory_id, thread_id):
+    def get_thread(self, subcategory_id, thread_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         offset = int(thread_id)-1 #0 indexed
         sql_string = "select * from threads "
-        sql_string += "where category_id = %s and "
-        sql_string += "subcategory_id = %s "
+        sql_string += "where subcategory_id = %s "
         sql_string += "limit 1 "
         sql_string += "offset %s;"
         psql_cursor.execute(
             sql_string,
-            (category_id, subcategory_id, offset)
+            (subcategory_id, offset)
         )
         forum_post = psql_cursor.fetchone()
         psql_cursor.close()
@@ -235,12 +234,11 @@ class ForumsSubcategoryThreads(Resource):
             forum_post = [self.construct_response(forum_post)]
         return forum_post
 
-    def get_threads(self, category_id, subcategory_id, thread_min, thread_max):
+    def get_threads(self, subcategory_id, thread_min, thread_max):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         sql_string = "select * from threads "
-        sql_string += "where category_id = %s and "
-        sql_string += "subcategory_id = %s "
+        sql_string += "where subcategory_id = %s "
         sql_string += "limit %s "
         sql_string += "offset %s;"
         limit = (thread_max - thread_min) + 1
@@ -248,7 +246,6 @@ class ForumsSubcategoryThreads(Resource):
         psql_cursor.execute(
             sql_string,
             (
-                category_id,
                 subcategory_id,
                 limit,
                 offset
@@ -259,13 +256,12 @@ class ForumsSubcategoryThreads(Resource):
         db.close()
         return [self.construct_response(thread) for thread in forum_threads]
 
-    def get(self, category_id, subcategory_id, thread_id):
+    def get(self, subcategory_id, thread_id):
         regex_post = re.compile(r'^\d+$')
         regex_posts = re.compile(r'^(?P<min>\d+)-(?P<max>\d+)$')
         response = {}
         if(regex_post.match(thread_id)):
             response = self.get_thread(
-                category_id,
                 subcategory_id,
                 thread_id
             )
@@ -275,7 +271,6 @@ class ForumsSubcategoryThreads(Resource):
             max = int(matches.group('max'))
             if(min < max and min != 0):
                 response = self.get_threads(
-                    category_id,
                     subcategory_id,
                     min,
                     max
@@ -296,17 +291,16 @@ class ForumsInfo(Resource):
 
 class ForumsAddThread(ValidatorResource):
     method_decorators = [jwt_required()]
-    def put(self, category_id, subcategory_id):
+    def put(self, subcategory_id):
         json_data = self.validate_json(request.get_json())
         db = DatabaseConnector()
         sql_string = "insert into threads "
         sql_string += "("
         sql_string += "title, "
         sql_string += "subcategory_id, "
-        sql_string += "category_id, "
         sql_string += "user_id"
         sql_string += ") "
-        sql_string += "VALUES (%s, %s, %s, %s) RETURNING id;"
+        sql_string += "VALUES (%s, %s, %s) RETURNING id;"
         psql_cursor = db.get_cursor()
         try:
             psql_cursor.execute(
@@ -314,7 +308,6 @@ class ForumsAddThread(ValidatorResource):
                 (
                     json_data["title"],
                     subcategory_id,
-                    category_id,
                     current_identity.id
                 )
             )
@@ -339,7 +332,7 @@ class ForumsThread(ValidatorResource):
             'title': sql_query[1],
             'timestamp': sql_query[2].isoformat(),
             'locked': sql_query[3],
-            'user_id': sql_query[6],
+            'user_id': sql_query[5],
             'post_count': post_count
         }
 
@@ -505,15 +498,15 @@ api.add_resource(
 )
 api.add_resource(
     ForumsSpecificSubcategoryInfo,
-    '/forums/categories/<int:category_id>/<int:subcategory_id>'
+    '/forums/subcategories/<int:subcategory_id>'
 )
 api.add_resource(
     ForumsSubcategoryThreads,
-    '/forums/categories/<int:category_id>/<int:subcategory_id>/<string:thread_id>'
+    '/forums/subcategories/<int:subcategory_id>/<string:thread_id>'
 )
 api.add_resource(
     ForumsAddThread,
-    '/forums/categories/<int:category_id>/<int:subcategory_id>',
+    '/forums/subcategories/<int:subcategory_id>',
     resource_class_args=forums_required_fields
 )
 api.add_resource(ForumsInfo,'/forums')
