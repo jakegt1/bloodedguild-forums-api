@@ -14,10 +14,30 @@ DB_NAME = config["db_name"]
 USER = config["username"]
 PASSWORD = config["password"]
 
+app = Flask(__name__)
+app.config['SECRET_KEY'] = config["secret"]
+api = Api(app)
+
+def get_post_count(thread_id):
+    db = DatabaseConnector()
+    psql_cursor = db.get_cursor()
+    sql_string = "select COUNT(*) from posts "
+    sql_string += "where thread_id = %s;"
+    psql_cursor.execute(
+        sql_string,
+        (thread_id,)
+    )
+    post_count = psql_cursor.fetchone()[0]
+    psql_cursor.close()
+    db.close()
+    return post_count
+
+
 class User(object):
     def __init__(self, id, username):
         self.id = id
         self.username = username
+
 
 def authenticate(username, password):
     auth_db = DatabaseAuth()
@@ -38,10 +58,6 @@ def identity(payload):
 
     print(user_data)
     return User(user_data[0], user_data[1])
-
-app = Flask(__name__)
-app.config['SECRET_KEY'] = config["secret"]
-api = Api(app)
 
 jwt = JWT(app, authenticate, identity)
 
@@ -129,11 +145,24 @@ class DefaultLocation(Resource):
 
 class ForumsCategoriesInfo(Resource):
     def construct_subquery_response(self, sql_query):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select COUNT(*) from "
+        sql_string += "threads "
+        sql_string += "where subcategory_id = %s;"
+        psql_cursor.execute(
+            sql_string,
+            (sql_query[0],)
+        )
+        thread_count = psql_cursor.fetchone()[0]
+        psql_cursor.close()
+        db.close()
         return {
             'type': 'subcategory',
             'id': sql_query[0],
             'title': sql_query[1],
-            'description': sql_query[2]
+            'description': sql_query[2],
+            'thread_count': thread_count
         }
 
     def construct_response(self, sql_query):
@@ -185,32 +214,51 @@ class ForumsSubcategoriesInfo(Resource):
         return {'type': 'category'}
 
 
-class ForumsSpecificSubcategoryInfo(Resource):
-    def get(self, subcategory_id):
-        return {'type': 'subcategory'}
-
-
-class ForumsSubcategoryThreads(Resource):
+class ForumsSubcategoryInfo(Resource):
     def construct_response(self, sql_query):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select COUNT(*) from posts "
-        sql_string += "where thread_id = %s;"
+        sql_string = "select COUNT(*) from "
+        sql_string += "threads "
+        sql_string += "WHERE subcategory_id = %s;"
         psql_cursor.execute(
             sql_string,
             (sql_query[0],)
         )
-        post_count = psql_cursor.fetchone()[0]
+        thread_count = psql_cursor.fetchone()[0]
         psql_cursor.close()
         db.close()
+        return {
+            'type': 'subcategory',
+            'id': sql_query[0],
+            'title': sql_query[1],
+            'description': sql_query[2],
+            'thread_count': thread_count
+        }
+
+    def get(self, subcategory_id):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select * from subcategories "
+        sql_string += "where id = %s;"
+        psql_cursor.execute(
+            sql_string,
+            (subcategory_id,)
+        )
+        forum_subcategory = psql_cursor.fetchone()
+        return self.construct_response(forum_subcategory)
+
+
+class ForumsSubcategoryThreads(Resource):
+    def construct_response(self, sql_query):
         return {
             'type': 'thread',
             'id': sql_query[0],
             'title': sql_query[1],
             'timestamp': sql_query[2].isoformat(),
             'locked': sql_query[3],
-            'user_id': sql_query[6],
-            'post_count': post_count
+            'user_id': sql_query[5],
+            'post_count': get_post_count(sql_query[0])
         }
 
     def get_thread(self, subcategory_id, thread_id):
@@ -325,7 +373,7 @@ class ForumsAddThread(ValidatorResource):
 
 
 class ForumsThread(ValidatorResource):
-    def construct_response(self, sql_query, post_count):
+    def construct_response(self, sql_query):
         return {
             'type': 'thread',
             'id': sql_query[0],
@@ -333,7 +381,7 @@ class ForumsThread(ValidatorResource):
             'timestamp': sql_query[2].isoformat(),
             'locked': sql_query[3],
             'user_id': sql_query[5],
-            'post_count': post_count
+            'post_count': get_post_count(sql_query[0])
         }
 
     def get(self, thread_id):
@@ -346,18 +394,11 @@ class ForumsThread(ValidatorResource):
             (thread_id,)
         )
         forum_thread = psql_cursor.fetchone()
-        sql_string = "select COUNT(*) from posts "
-        sql_string += "where thread_id = %s;"
-        psql_cursor.execute(
-            sql_string,
-            (thread_id,)
-        )
-        post_count = psql_cursor.fetchone()[0]
         psql_cursor.close()
         db.close()
         response = []
         if(forum_thread):
-            response = [self.construct_response(forum_thread, post_count)]
+            response = [self.construct_response(forum_thread)]
         return response
 
 
@@ -497,7 +538,7 @@ api.add_resource(
     '/forums/categories/<int:category_id>'
 )
 api.add_resource(
-    ForumsSpecificSubcategoryInfo,
+    ForumsSubcategoryInfo,
     '/forums/subcategories/<int:subcategory_id>'
 )
 api.add_resource(
