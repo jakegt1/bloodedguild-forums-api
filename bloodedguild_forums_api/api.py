@@ -193,7 +193,7 @@ class ForumsSpecificSubcategoryInfo(Resource):
 class ForumsSubcategoryThreads(Resource):
     def construct_response(self, sql_query):
         return {
-                'type': 'post',
+                'type': 'thread',
                 'id': sql_query[0],
                 'title': sql_query[1],
                 'timestamp': sql_query[2].isoformat(),
