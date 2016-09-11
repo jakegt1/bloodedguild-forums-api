@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request, make_response
 from flask_jwt import JWT, jwt_required, current_identity
 from flask_restful import Resource, Api, abort
-from datetime import datetime
+from datetime import datetime, timedelta
 import sqlite3 as sql
 import re
 import sys
@@ -16,6 +16,7 @@ PASSWORD = config["password"]
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config["secret"]
+app.config['JWT_EXPIRATION_DELTA'] = timedelta(weeks=1)
 api = Api(app)
 
 def get_post_count(thread_id):
@@ -119,6 +120,7 @@ class DatabaseConnector():
             cursor_factory=DictCursor
         )
 
+
 class DatabaseAuth():
     def __init__(self):
         self.db = DatabaseConnector()
@@ -141,6 +143,74 @@ class DatabaseAuth():
 class DefaultLocation(Resource):
     def get(self):
         return {'info': 'Bloodedguild forums api. Do not touch! wow!'}
+
+
+class ForumsUser(Resource):
+    def get(self, user_id):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select * from "
+        sql_string += "users, groups "
+        sql_string += "where users.id = %s;"
+        psql_cursor.execute(
+            sql_string,
+            (user_id,)
+        )
+        user = psql_cursor.fetchone()
+        if(not user):
+            user = []
+        else:
+            user_object = {
+                'type': 'user',
+                'id': user[0],
+                'f_name': user[1],
+                'l_name': user[2],
+                'username': user[3],
+                'email': user[5],
+                'group_id': user[7],
+                'group_name': user[8]
+            }
+            user = [user_object]
+        psql_cursor.close()
+        db.close()
+        return user
+
+
+class ForumsAddUser(ValidatorResource):
+    def put(self):
+        json_data = self.validate_json(request.get_json())
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "insert into users "
+        sql_string += "(f_name, l_name, username, password_hash, email) "
+        sql_string += "VALUES("
+        sql_string += "%s, "
+        sql_string += "%s, "
+        sql_string += "%s, "
+        sql_string += "crypt(%s, gen_salt('bf', 8)), "
+        sql_string += "%s) returning id;"
+        try:
+            psql_cursor.execute(
+                sql_string,
+                (
+                    json_data['f_name'],
+                    json_data['l_name'],
+                    json_data['username'],
+                    json_data['password_hash'],
+                    json_data['email']
+                )
+            )
+        except psycopg2.IntegrityError:
+            abort(401, message="Error: Database failed to execute insert.")
+        new_id = psql_cursor.fetchone()[0]
+        psql_cursor.close()
+        db.close()
+        return {
+            'type': 'user',
+            'username': json_data["username"],
+            'id': new_id,
+            'status': 'created'
+        }
 
 
 class ForumsCategoriesInfo(Resource):
@@ -208,6 +278,7 @@ class ForumsCategoriesInfo(Resource):
                 forum_categories
             ]
         return response
+
 
 class ForumsSubcategoriesInfo(Resource):
     def get(self, category_id):
@@ -529,6 +600,13 @@ def after_request(response):
 api.add_resource(DefaultLocation, '/')
 forums_required_fields = ([["title"]])
 threads_required_fields = ([["content"]])
+users_required_fields = ([[
+    "f_name",
+    "l_name",
+    "username",
+    "password_hash",
+    "email"
+]])
 api.add_resource(
     ForumsCategoriesInfo,
     '/forums/categories'
@@ -560,6 +638,15 @@ api.add_resource(
 api.add_resource(
     ForumsPost,
     '/forums/threads/<int:thread_id>/<string:post_id>'
+)
+api.add_resource(
+    ForumsUser,
+    '/forums/users/<int:user_id>'
+)
+api.add_resource(
+    ForumsAddUser,
+    '/forums/users',
+    resource_class_args=users_required_fields
 )
 
 if __name__ == '__main__':
