@@ -8,7 +8,7 @@ import sys
 import hashlib
 import psycopg2
 from psycopg2.extras import DictCursor
-from .config import config;
+from config import config;
 
 DB_NAME = config["db_name"]
 USER = config["username"]
@@ -329,15 +329,24 @@ class ForumsSubcategoryThreads(Resource):
             'timestamp': sql_query[2].isoformat(),
             'locked': sql_query[3],
             'user_id': sql_query[5],
-            'post_count': get_post_count(sql_query[0])
+            'post_count': get_post_count(sql_query[0]),
+            'username': sql_query[6],
+            'posts_timestamp': sql_query[7].isoformat()
         }
 
     def get_thread(self, subcategory_id, thread_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         offset = int(thread_id)-1 #0 indexed
-        sql_string = "select * from threads "
-        sql_string += "where subcategory_id = %s "
+        sql_string = "select threads.*, users.username, posts.timestamp "
+        sql_string += "from threads, posts, users where "
+        sql_string += "threads.subcategory_id = %s and "
+        sql_string += "threads.id = posts.thread_id and "
+        sql_string += "posts.id = ("
+        sql_string += "select max (id) from posts import where "
+        sql_string += "posts.thread_id = threads.id) "
+        sql_string += "and users.id = threads.user_id "
+        sql_string += "order by posts.timestamp desc "
         sql_string += "limit 1 "
         sql_string += "offset %s;"
         psql_cursor.execute(
@@ -356,8 +365,15 @@ class ForumsSubcategoryThreads(Resource):
     def get_threads(self, subcategory_id, thread_min, thread_max):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select * from threads "
-        sql_string += "where subcategory_id = %s "
+        sql_string = "select threads.*, users.username, posts.timestamp "
+        sql_string += "from threads, posts, users where "
+        sql_string += "threads.subcategory_id = %s and "
+        sql_string += "threads.id = posts.thread_id and "
+        sql_string += "posts.id = ("
+        sql_string += "select max (id) from posts where "
+        sql_string += "posts.thread_id = threads.id) "
+        sql_string += "and users.id = threads.user_id "
+        sql_string += "order by posts.timestamp desc "
         sql_string += "limit %s "
         sql_string += "offset %s;"
         limit = (thread_max - thread_min) + 1
@@ -408,6 +424,7 @@ class ForumsInfo(Resource):
             'type': 'forums',
         }
 
+
 class ForumsAddThread(ValidatorResource):
     method_decorators = [jwt_required()]
     def put(self, subcategory_id):
@@ -433,6 +450,24 @@ class ForumsAddThread(ValidatorResource):
         except psycopg2.IntegrityError:
             abort(401, message="Error: Database failed to execute insert.")
         new_id = psql_cursor.fetchone()[0]
+        sql_string = "insert into posts "
+        sql_string += "("
+        sql_string += "content, "
+        sql_string += "thread_id, "
+        sql_string += "user_id"
+        sql_string += ") "
+        sql_string += "VALUES (%s, %s, %s) RETURNING id;"
+        try:
+            psql_cursor.execute(
+                sql_string,
+                (
+                    json_data["content"],
+                    new_id,
+                    current_identity.id
+                )
+            )
+        except psycopg2.IntegrityError:
+            abort(401, message="Error: Database failed to execute insert.")
         psql_cursor.close()
         db.close()
         return {
@@ -452,14 +487,15 @@ class ForumsThread(ValidatorResource):
             'timestamp': sql_query[2].isoformat(),
             'locked': sql_query[3],
             'user_id': sql_query[5],
-            'post_count': get_post_count(sql_query[0])
+            'post_count': get_post_count(sql_query[0]),
+            'username': sql_query[9]
         }
 
     def get(self, thread_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select * from threads "
-        sql_string += "where id = %s;"
+        sql_string = "select * from threads, users "
+        sql_string += "where threads.id = %s and users.id = threads.user_id"
         psql_cursor.execute(
             sql_string,
             (thread_id,)
@@ -512,15 +548,16 @@ class ForumsPost(Resource):
             'id': sql_query[0],
             'content': sql_query[1],
             'timestamp': sql_query[2].isoformat(),
-            'user_id': sql_query[4]
+            'user_id': sql_query[4],
+            'username': sql_query[8]
         }
 
     def get_post(self, thread_id, post_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         offset = int(post_id)-1 #offset is 0 indexed
-        sql_string = "select * from posts "
-        sql_string += "where thread_id = %s "
+        sql_string = "select * from posts, users "
+        sql_string += "where posts.thread_id = %s and users.id=posts.user_id "
         sql_string += "limit 1 "
         sql_string += "offset %s;"
         psql_cursor.execute(
@@ -539,8 +576,9 @@ class ForumsPost(Resource):
     def get_posts(self, thread_id, post_min, post_max):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select * from posts "
-        sql_string += "where thread_id = %s "
+        sql_string = "select * from posts, users "
+        sql_string += "where posts.thread_id = %s and users.id=posts.user_id "
+        sql_string += "order by posts.id asc "
         sql_string += "limit %s "
         sql_string += "offset %s;"
         limit = (post_max - post_min) + 1
@@ -554,6 +592,7 @@ class ForumsPost(Resource):
             )
         )
         forum_posts = psql_cursor.fetchall()
+        print(forum_posts)
         psql_cursor.close()
         db.close()
         return [self.construct_response(post) for post in forum_posts]
@@ -598,7 +637,7 @@ def after_request(response):
     return response
 
 api.add_resource(DefaultLocation, '/')
-forums_required_fields = ([["title"]])
+forums_required_fields = ([["title", "content"]])
 threads_required_fields = ([["content"]])
 users_required_fields = ([[
     "f_name",
