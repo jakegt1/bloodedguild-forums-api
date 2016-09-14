@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request, make_response
 from flask_jwt import JWT, jwt_required, current_identity
 from flask_restful import Resource, Api, abort
 from datetime import datetime, timedelta
-from lxml.html.clean import clean_html
+from .clean_html import clean_html
 import sqlite3 as sql
 import re
 import sys
@@ -223,30 +223,32 @@ class ForumsAddUser(ValidatorResource):
 
 class ForumsCategoriesInfo(Resource):
     def construct_subquery_response(self, sql_query):
-        db = DatabaseConnector()
-        psql_cursor = db.get_cursor()
-        sql_string = "select COUNT(*) from "
-        sql_string += "threads "
-        sql_string += "where subcategory_id = %s;"
-        psql_cursor.execute(
-            sql_string,
-            (sql_query[0],)
-        )
-        thread_count = psql_cursor.fetchone()[0]
-        psql_cursor.close()
-        db.close()
+        post_response = {}
+        if(sql_query[5]):
+            post_response = {
+                'type': 'post',
+                'id': sql_query[5],
+                'thread_id': sql_query[6],
+                'title': sql_query[7],
+                'user_id': sql_query[8],
+                'username': sql_query[9],
+                'avatar': sql_query[10]
+            }
         return {
             'type': 'subcategory',
             'id': sql_query[0],
             'title': sql_query[1],
             'description': sql_query[2],
-            'thread_count': thread_count
+            'thread_count': sql_query[4],
+            'post': post_response
         }
 
     def construct_response(self, sql_query):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select * from subcategories "
+        sql_string = "select * from subcategories_thread_counts "
+        sql_string += "LEFT JOIN subcategories_main on "
+        sql_string += "(subcategories_thread_counts.id = subcategories_main.id) "
         sql_string += "where category_id = %s;"
         psql_cursor.execute(
             sql_string,
