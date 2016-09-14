@@ -341,7 +341,8 @@ class ForumsSubcategoryThreads(Resource):
             'username': sql_query[6],
             'posts_timestamp': sql_query[7].isoformat(),
             'posts_user_id': sql_query[8],
-            'posts_username': sql_query[9]
+            'posts_username': sql_query[9],
+            'posts_avatar': sql_query[10]
         }
 
     def get_thread(self, subcategory_id, thread_id):
@@ -349,7 +350,7 @@ class ForumsSubcategoryThreads(Resource):
         psql_cursor = db.get_cursor()
         offset = int(thread_id)-1 #0 indexed
         sql_string = "select threads.*, t_users.username, posts.timestamp, "
-        sql_string += "posts.user_id, p_users.username "
+        sql_string += "posts.user_id, p_users.username , p_users.avatar"
         sql_string += "from threads, posts, "
         sql_string += "users as t_users, users as p_users where "
         sql_string += "threads.subcategory_id = %s and "
@@ -379,7 +380,7 @@ class ForumsSubcategoryThreads(Resource):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         sql_string = "select threads.*, t_users.username, posts.timestamp, "
-        sql_string += "posts.user_id, p_users.username "
+        sql_string += "posts.user_id, p_users.username, p_users.avatar "
         sql_string += "from threads, posts, "
         sql_string += "users as t_users, users as p_users where "
         sql_string += "threads.subcategory_id = %s and "
@@ -579,6 +580,7 @@ class ForumsPost(Resource):
         sql_string = "select * from posts, users_post_counts "
         sql_string += "where posts.thread_id = %s and "
         sql_string += "users_post_counts.id = posts.user_id "
+        sql_string += "order by posts.id "
         sql_string += "limit 1 "
         sql_string += "offset %s;"
         psql_cursor.execute(
@@ -600,6 +602,7 @@ class ForumsPost(Resource):
         sql_string = "select * from posts, users_post_counts "
         sql_string += "where posts.thread_id = %s and "
         sql_string += "users_post_counts.id = posts.user_id "
+        sql_string += "order by posts.id "
         sql_string += "limit %s "
         sql_string += "offset %s;"
         limit = (post_max - post_min) + 1
