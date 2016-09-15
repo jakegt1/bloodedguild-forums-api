@@ -225,14 +225,19 @@ class ForumsCategoriesInfo(Resource):
     def construct_subquery_response(self, sql_query):
         post_response = {}
         if(sql_query[5]):
+            user = {
+                'type': 'user',
+                'id': sql_query[8],
+                'username': sql_query[10],
+                'avatar': sql_query[11]
+            }
             post_response = {
                 'type': 'post',
                 'id': sql_query[5],
                 'thread_id': sql_query[6],
                 'title': sql_query[7],
-                'user_id': sql_query[8],
-                'username': sql_query[9],
-                'avatar': sql_query[10]
+                'timestamp': sql_query[9].isoformat(),
+                'user': user
             }
         return {
             'type': 'subcategory',
@@ -309,19 +314,27 @@ class ForumsSubcategoryInfo(Resource):
         thread_count = psql_cursor.fetchone()[0]
         psql_cursor.close()
         db.close()
+        category = {
+            'type': 'category',
+            'id': sql_query[4],
+            'title': sql_query[5]
+        }
         return {
             'type': 'subcategory',
             'id': sql_query[0],
             'title': sql_query[1],
             'description': sql_query[2],
-            'thread_count': thread_count
+            'thread_count': thread_count,
+            'category': category
         }
 
     def get(self, subcategory_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select * from subcategories "
-        sql_string += "where id = %s;"
+        sql_string = "select *, categories.id, categories.title "
+        sql_string += "from subcategories, categories "
+        sql_string += "where subcategories.id = %s AND "
+        sql_string += "categories.id = subcategories.category_id;"
         psql_cursor.execute(
             sql_string,
             (subcategory_id,)
@@ -332,19 +345,27 @@ class ForumsSubcategoryInfo(Resource):
 
 class ForumsSubcategoryThreads(Resource):
     def construct_response(self, sql_query):
+        user_thread = {
+            'type': 'user',
+            'id': sql_query[5],
+            'username': sql_query[6],
+        }
+        user_post = {
+            'type': 'user',
+            'id': sql_query[8],
+            'username': sql_query[9],
+            'avatar': sql_query[10]
+        }
         return {
             'type': 'thread',
             'id': sql_query[0],
             'title': sql_query[1],
             'timestamp': sql_query[2].isoformat(),
             'locked': sql_query[3],
-            'user_id': sql_query[5],
+            'user_thread': user_thread,
+            'user_post': user_post,
             'post_count': get_post_count(sql_query[0]),
-            'username': sql_query[6],
             'posts_timestamp': sql_query[7].isoformat(),
-            'posts_user_id': sql_query[8],
-            'posts_username': sql_query[9],
-            'posts_avatar': sql_query[10]
         }
 
     def get_thread(self, subcategory_id, thread_id):
@@ -500,22 +521,47 @@ class ForumsAddThread(ValidatorResource):
 
 class ForumsThread(ValidatorResource):
     def construct_response(self, sql_query):
+        user = {
+            'type': 'user',
+            'id': sql_query[5],
+            'username': sql_query[9],
+            'group': sql_query[15]
+        }
+        subcategory = {
+            'type': 'subcategory',
+            'id': sql_query[16],
+            'title': sql_query[17]
+        }
+        category = {
+            'type': 'category',
+            'id': sql_query[18],
+            'title': sql_query[19]
+        }
         return {
             'type': 'thread',
             'id': sql_query[0],
             'title': sql_query[1],
             'timestamp': sql_query[2].isoformat(),
             'locked': sql_query[3],
-            'user_id': sql_query[5],
             'post_count': get_post_count(sql_query[0]),
-            'username': sql_query[9]
+            'user': user,
+            'subcategory': subcategory,
+            'category': category
         }
 
     def get(self, thread_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select * from threads, users "
-        sql_string += "where threads.id = %s and users.id = threads.user_id"
+        sql_string = "select threads.*, "
+        sql_string += "users_post_counts.*, "
+        sql_string += "subcategories.id, subcategories.title, "
+        sql_string += "categories.id, categories.title FROM "
+        sql_string += "threads, users_post_counts, "
+        sql_string += "subcategories, categories "
+        sql_string += "where threads.id = %s and "
+        sql_string += "users_post_counts.id = threads.user_id and "
+        sql_string += "subcategories.id = threads.subcategory_id and "
+        sql_string += "categories.id = subcategories.category_id;"
         psql_cursor.execute(
             sql_string,
             (thread_id,)
@@ -563,16 +609,20 @@ class ForumsAddPost(ValidatorResource):
 
 class ForumsPost(Resource):
     def construct_response(self, sql_query):
+        user = {
+            'type': 'user',
+            'id': sql_query[4],
+            'username': sql_query[8],
+            'avatar': sql_query[11],
+            'post_count': sql_query[13],
+            'group': sql_query[14]
+        }
         return {
             'type': 'post',
             'id': sql_query[0],
             'content': sql_query[1],
             'timestamp': sql_query[2].isoformat(),
-            'user_id': sql_query[4],
-            'username': sql_query[8],
-            'avatar': sql_query[11],
-            'post_count': sql_query[13],
-            'group': sql_query[14]
+            'user': user
         }
 
     def get_post(self, thread_id, post_id):
