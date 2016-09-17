@@ -36,21 +36,22 @@ def get_post_count(thread_id):
 
 
 class User(object):
-    def __init__(self, id, username):
+    def __init__(self, id, username, group):
         self.id = id
         self.username = username
+        self.group = group
 
 
 def authenticate(username, password):
     auth_db = DatabaseAuth()
     check_auth = auth_db.check_auth(username, password)
     if check_auth:
-        return User(check_auth[0], check_auth[3])
+        return User(check_auth[0], check_auth[1], check_auth[2])
 
 def identity(payload):
     db = DatabaseConnector()
     psql_cursor = db.get_cursor()
-    sql_string = "select id, username from users "
+    sql_string = "select id, username, name from users_post_counts "
     sql_string += "where id = %s"
     psql_cursor.execute(
         sql_string,
@@ -59,7 +60,7 @@ def identity(payload):
     user_data = psql_cursor.fetchone()
 
     print(user_data)
-    return User(user_data[0], user_data[1])
+    return User(user_data[0], user_data[1], user_data[2])
 
 jwt = JWT(app, authenticate, identity)
 
@@ -128,7 +129,7 @@ class DatabaseAuth():
 
     def check_auth(self, username, password):
         psql_cursor = self.db.get_cursor()
-        sql_string = "select * from users "
+        sql_string = "select id, username, name from users_post_counts "
         sql_string += "where username = %s"
         sql_string += "and password_hash = crypt(%s, password_hash);"
         psql_cursor.execute(
@@ -177,6 +178,81 @@ class ForumsUser(Resource):
         db.close()
         return user
 
+class ForumsPatchUser(Resource):
+    method_decorators = [jwt_required()]
+    def validate_json(self, json_data):
+        if(not json_data):
+            abort(401, message="JSON data was empty.")
+        possible_fields = ["password_hash", "avatar"]
+        bad_fields = []
+        for field in json_data.keys():
+            if(field not in possible_fields):
+                bad_fields.append(field)
+        if(bad_fields):
+            error_string = "The JSON data had the following bad fields:"
+            for field in missing_fields:
+                error_string += field+","
+                error_string = error_string[:-1] #trim last comma
+                abort(400, message=error_string)
+        else:
+            return json_data
+
+    def run_sql_query(self, json_data):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        json_keys = list(json_data.keys())
+        sql_arguments = []
+        sql_string = "update users set ("
+        if(len(json_data) > 1):
+            sql_string += "password_hash, avatar) = ("
+            sql_string += "crypt(%s, gen_salt('bf', 8)), %s) where "
+            sql_arguments.append(json_data["password_hash"])
+            sql_arguments.append(json_data["avatar"])
+        else:
+            sql_string += json_keys[0] + ") = ("
+            if("password_hash" in json_keys):
+                sql_string += "crypt(%s, gen_salt('bf', 8))) where "
+                sql_arguments.append(json_data["password_hash"])
+            else:
+                sql_string += "%s) where "
+                sql_arguments.append(json_data["avatar"])
+        sql_string += "id = %s;"
+        sql_arguments.append(current_identity.id)
+        try:
+            psql_cursor.execute(
+                sql_string,
+                tuple(sql_arguments)
+            )
+        except psycopg2.IntegrityError:
+            abort(401, message="Error: Database failed to execute insert.")
+        psql_cursor.close()
+        db.close()
+
+    def validate_avatar_link(self, link):
+        allowed_sites = ["imgur.com"]
+        from_allowed_site = False
+        for site in allowed_sites:
+            if(site in link):
+                from_allowed_site = True
+                break
+        if(not from_allowed_site):
+            abort(401, message="Error: avatar link was from bad site.")
+        regex = re.compile(r'^http[s]?:\\/\\/')
+        subbed_link = re.sub(r'^http[s]?:\/\/', '', link)
+        return subbed_link
+
+    def patch(self):
+        json_data = self.validate_json(request.get_json())
+        response = {}
+        if('avatar' in json_data):
+            json_data['avatar'] = self.validate_avatar_link(
+                json_data['avatar']
+            )
+            response['avatar'] = json_data['avatar']
+        self.run_sql_query(json_data)
+        response['type'] = 'user'
+        response['status'] = 'updated'
+        return response
 
 class ForumsAddUser(ValidatorResource):
     def put(self):
@@ -701,7 +777,9 @@ def jwt_response_handler(access_token, identity):
     return jsonify(
         {
             'access_token': access_token.decode('utf-8'),
-            'username': identity.username
+            'username': identity.username,
+            'id': identity.id,
+            'group': identity.group
         }
     )
 
@@ -709,7 +787,9 @@ def jwt_response_handler(access_token, identity):
 def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
+    response.headers.add(
+        'Access-Control-Allow-Methods',
+        'GET,PUT,POST,DELETE,PATCH')
     return response
 
 api.add_resource(DefaultLocation, '/')
@@ -763,6 +843,9 @@ api.add_resource(
     '/forums/users',
     resource_class_args=users_required_fields
 )
-
+api.add_resource(
+    ForumsPatchUser,
+    '/forums/users'
+)
 if __name__ == '__main__':
     app.run(debug=True)

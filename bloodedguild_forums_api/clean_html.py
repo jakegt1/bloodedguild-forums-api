@@ -18,7 +18,8 @@ acceptable_attributes = ['abbr', 'accept', 'accept-charset', 'accesskey',
   'multiple', 'name', 'nohref', 'noshade', 'nowrap', 'prompt',
   'rel', 'rev', 'rows', 'rowspan', 'rules', 'scope', 'shape', 'size',
   'span', 'src', 'start', 'summary', 'tabindex', 'target', 'title', 'type',
-  'usemap', 'valign', 'value', 'vspace', 'width', 'style']
+  'usemap', 'valign', 'value', 'vspace', 'width', 'style',
+  'allowFullscreen']
 
 def lose_html_and_body_tags(soup):
     tag_str_list = []
