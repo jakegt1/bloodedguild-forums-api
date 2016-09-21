@@ -182,7 +182,7 @@ class ForumsPatchUser(Resource):
     method_decorators = [jwt_required()]
     def validate_json(self, json_data):
         if(not json_data):
-            abort(401, message="JSON data was empty.")
+            abort(400, message="JSON data was empty.")
         possible_fields = ["password_hash", "avatar"]
         bad_fields = []
         for field in json_data.keys():
@@ -224,7 +224,7 @@ class ForumsPatchUser(Resource):
                 tuple(sql_arguments)
             )
         except psycopg2.IntegrityError:
-            abort(401, message="Error: Database failed to execute insert.")
+            abort(400, message="Error: Database failed to execute insert.")
         psql_cursor.close()
         db.close()
 
@@ -236,8 +236,8 @@ class ForumsPatchUser(Resource):
                 from_allowed_site = True
                 break
         if(not from_allowed_site):
-            abort(401, message="Error: avatar link was from bad site.")
-        regex = re.compile(r'^http[s]?:\\/\\/')
+            abort(400, message="Error: avatar link was from bad site.")
+            regex = re.compile(r'^http[s]?:\\/\\/')
         subbed_link = re.sub(r'^http[s]?:\/\/', '', link)
         return subbed_link
 
@@ -255,8 +255,20 @@ class ForumsPatchUser(Resource):
         return response
 
 class ForumsAddUser(ValidatorResource):
+    def validate_user_name(self, user_name):
+        regex_user_name = re.compile(r'^[0-9a-zA-Z_]+$')
+        if(len(user_name) > 30):
+            abort(
+                400,
+                message="Error: Username was longer than 30 characters."
+            )
+        if(not regex_user_name.match(user_name)):
+            abort(400, message="Error: Username had bad characters.")
+        print(regex_user_name.match(user_name))
+
     def put(self):
         json_data = self.validate_json(request.get_json())
+        self.validate_user_name(json_data['username'])
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         sql_string = "insert into users "
@@ -285,7 +297,7 @@ class ForumsAddUser(ValidatorResource):
                 )
             )
         except psycopg2.IntegrityError:
-            abort(401, message="Error: Database failed to execute insert.")
+            abort(400, message="Error: Database failed to execute insert.")
         new_id = psql_cursor.fetchone()[0]
         psql_cursor.close()
         db.close()
@@ -529,9 +541,9 @@ class ForumsSubcategoryThreads(Resource):
                 )
             else:
                 error_message = "Minimum ID given was larger than Maximum ID."
-                abort(401, message={"error": error_message})
+                abort(400, message={"error": error_message})
         else:
-            abort(401, message={"error": "thread id did not match regex"})
+            abort(400, message={"error": "thread id did not match regex"})
         return response
 
 
@@ -565,7 +577,7 @@ class ForumsAddThread(ValidatorResource):
                 )
             )
         except psycopg2.IntegrityError:
-            abort(401, message="Error: Database failed to execute insert.")
+            abort(400, message="Error: Database failed to execute insert.")
         new_id = psql_cursor.fetchone()[0]
         sql_string = "insert into posts "
         sql_string += "("
@@ -584,7 +596,7 @@ class ForumsAddThread(ValidatorResource):
                 )
             )
         except psycopg2.IntegrityError:
-            abort(401, message="Error: Database failed to execute insert.")
+            abort(400, message="Error: Database failed to execute insert.")
         psql_cursor.close()
         db.close()
         return {
@@ -767,9 +779,9 @@ class ForumsPost(Resource):
                 )
             else:
                 error_message = "Minimum ID given was larger than Maximum ID."
-                abort(401, message={"error": error_message})
+                abort(400, message={"error": error_message})
         else:
-            abort(401, message={"error": "post id did not match regex"})
+            abort(400, message={"error": "post id did not match regex"})
         return response
 
 @jwt.auth_response_handler
@@ -786,10 +798,11 @@ def jwt_response_handler(access_token, identity):
 @app.after_request
 def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     response.headers.add(
         'Access-Control-Allow-Methods',
-        'GET,PUT,POST,DELETE,PATCH')
+        'GET,PUT,POST,DELETE,PATCH'
+    )
     return response
 
 api.add_resource(DefaultLocation, '/')
