@@ -14,7 +14,7 @@ from .config import config;
 DB_NAME = config["db_name"]
 USER = config["username"]
 PASSWORD = config["password"]
-
+GROUP_ADMINISTRATORS = ["Server Administrator", "Guild Master"]
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config["secret"]
 app.config['JWT_EXPIRATION_DELTA'] = timedelta(weeks=1)
@@ -40,7 +40,6 @@ class User(object):
         self.id = id
         self.username = username
         self.group = group
-
 
 def authenticate(username, password):
     auth_db = DatabaseAuth()
@@ -435,14 +434,14 @@ class ForumsSubcategoryThreads(Resource):
     def construct_response(self, sql_query):
         user_thread = {
             'type': 'user',
-            'id': sql_query[5],
-            'username': sql_query[6],
+            'id': sql_query[6],
+            'username': sql_query[7],
         }
         user_post = {
             'type': 'user',
-            'id': sql_query[8],
-            'username': sql_query[9],
-            'avatar': sql_query[10]
+            'id': sql_query[9],
+            'username': sql_query[10],
+            'avatar': sql_query[11]
         }
         return {
             'type': 'thread',
@@ -453,7 +452,7 @@ class ForumsSubcategoryThreads(Resource):
             'user_thread': user_thread,
             'user_post': user_post,
             'post_count': get_post_count(sql_query[0]),
-            'posts_timestamp': sql_query[7].isoformat(),
+            'posts_timestamp': sql_query[8].isoformat(),
         }
 
     def get_thread(self, subcategory_id, thread_id):
@@ -515,7 +514,6 @@ class ForumsSubcategoryThreads(Resource):
             )
         )
         forum_threads = psql_cursor.fetchall()
-        print(forum_threads)
         psql_cursor.close()
         db.close()
         return [self.construct_response(thread) for thread in forum_threads]
@@ -607,23 +605,75 @@ class ForumsAddThread(ValidatorResource):
         }
 
 
+class ForumsModifyThread(ValidatorResource):
+    method_decorators = [jwt_required()]
+    def patch(self, thread_id):
+        json_data = self.validate_json(request.get_json())
+        if(current_identity.group not in GROUP_ADMINISTRATORS):
+            abort(
+                403,
+                message="Error: This is for administrators only."
+            )
+        db = DatabaseConnector()
+        sql_string = "update threads set (locked) = (%s) where "
+        sql_string += "threads.id = %s;"
+        psql_cursor = db.get_cursor()
+        try:
+            psql_cursor.execute(
+                sql_string,
+                (json_data["locked"], thread_id)
+            )
+        except psycopg2.IntegrityError:
+            abort(400, message="Error: Database failed to execute insert.")
+        return {
+            "type": "thread",
+            "id": thread_id,
+            "locked": json_data["locked"],
+            "status": "updated"
+        }
+
+    def delete(self, thread_id):
+        if(current_identity.group not in GROUP_ADMINISTRATORS):
+            abort(
+                403,
+                message="Error: This is for administrators only."
+            )
+        db = DatabaseConnector()
+        sql_string = "delete from threads where "
+        sql_string += "threads.id = %s;"
+        psql_cursor = db.get_cursor()
+        try:
+            psql_cursor.execute(
+                sql_string,
+                (thread_id)
+            )
+        except psycopg2.IntegrityError:
+            abort(400, message="Error: Database failed to execute insert.")
+        return {
+            "type": "thread",
+            "id": thread_id,
+            "status": "deleted"
+        }
+
+
+
 class ForumsThread(ValidatorResource):
     def construct_response(self, sql_query):
         user = {
             'type': 'user',
-            'id': sql_query[5],
-            'username': sql_query[9],
-            'group': sql_query[15]
+            'id': sql_query[6],
+            'username': sql_query[10],
+            'group': sql_query[16]
         }
         subcategory = {
             'type': 'subcategory',
-            'id': sql_query[16],
-            'title': sql_query[17]
+            'id': sql_query[17],
+            'title': sql_query[18]
         }
         category = {
             'type': 'category',
-            'id': sql_query[18],
-            'title': sql_query[19]
+            'id': sql_query[19],
+            'title': sql_query[20]
         }
         return {
             'type': 'thread',
@@ -655,6 +705,7 @@ class ForumsThread(ValidatorResource):
             (thread_id,)
         )
         forum_thread = psql_cursor.fetchone()
+        print(forum_thread)
         psql_cursor.close()
         db.close()
         response = []
@@ -694,22 +745,22 @@ class ForumsAddPost(ValidatorResource):
             'status': 'created'
         }
 
-
 class ForumsPost(Resource):
     def construct_response(self, sql_query):
         user = {
             'type': 'user',
-            'id': sql_query[4],
-            'username': sql_query[8],
-            'avatar': sql_query[11],
-            'post_count': sql_query[13],
-            'group': sql_query[14]
+            'id': sql_query[5],
+            'username': sql_query[9],
+            'avatar': sql_query[12],
+            'post_count': sql_query[14],
+            'group': sql_query[15]
         }
         return {
             'type': 'post',
             'id': sql_query[0],
             'content': sql_query[1],
             'timestamp': sql_query[2].isoformat(),
+            'edited_timestamp': sql_query[3].isoformat(),
             'user': user
         }
 
@@ -784,6 +835,51 @@ class ForumsPost(Resource):
             abort(400, message={"error": "post id did not match regex"})
         return response
 
+class ForumsModifyPost(ValidatorResource):
+    method_decorators = [jwt_required()]
+    def patch(self, thread_id, post_id):
+        json_data = self.validate_json(request.get_json())
+        offset = int(thread_id)-1 #0 indexed
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select posts.id, posts.user_id from posts "
+        sql_string += "where posts.thread_id = %s "
+        sql_string += "limit 1 "
+        sql_string += "offset %s;"
+        psql_cursor.execute(
+            sql_string,
+            (thread_id, offset)
+        )
+        post = psql_cursor.fetchone()
+        true_post_id = post[0]
+        user_id = post[1]
+        if(current_identity.id != user_id):
+            abort(
+                400,
+                message={"error": "user logged in did not make this post"}
+            )
+        sql_string = "update posts set (content, edited_timestamp) = "
+        sql_string += "(%s, "
+        sql_string += "now() at time zone 'utc') where "
+        sql_string += "posts.id = %s;"
+        try:
+            psql_cursor.execute(
+                sql_string,
+                (
+                    clean_html(json_data["content"]),
+                    true_post_id
+                )
+            )
+        except psycopg2.IntegrityError:
+            abort(400, message="Error: Database failed to execute insert.")
+        psql_cursor.close()
+        db.close()
+        return {
+            "type": "post",
+            "id" : true_post_id,
+            "status": "updated"
+        }
+
 @jwt.auth_response_handler
 def jwt_response_handler(access_token, identity):
     return jsonify(
@@ -806,14 +902,18 @@ def after_request(response):
     return response
 
 api.add_resource(DefaultLocation, '/')
-forums_required_fields = ([["title", "content"]])
-threads_required_fields = ([["content"]])
+threads_required_fields = ([["title", "content"]])
+threads_update_required_fields = ([["locked"]])
+posts_required_fields = ([["content"]])
 users_required_fields = ([[
     "f_name",
     "l_name",
     "username",
     "password_hash",
     "email"
+]])
+posts_required_fields = ([[
+    "content"
 ]])
 api.add_resource(
     ForumsCategoriesInfo,
@@ -832,20 +932,30 @@ api.add_resource(
     '/forums/subcategories/<int:subcategory_id>/<string:thread_id>'
 )
 api.add_resource(
+    ForumsModifyThread,
+    '/forums/threads/<int:thread_id>',
+    resource_class_args=threads_update_required_fields
+)
+api.add_resource(
     ForumsAddThread,
     '/forums/subcategories/<int:subcategory_id>',
-    resource_class_args=forums_required_fields
+    resource_class_args=threads_required_fields
 )
 api.add_resource(ForumsInfo,'/forums')
 api.add_resource(ForumsThread, '/forums/threads/<int:thread_id>')
 api.add_resource(
     ForumsAddPost,
     '/forums/threads/<int:thread_id>',
-    resource_class_args=threads_required_fields
+    resource_class_args=posts_required_fields
+)
+api.add_resource(
+    ForumsModifyPost,
+    '/forums/threads/<int:thread_id>/<int:post_id>',
+    resource_class_args=posts_required_fields
 )
 api.add_resource(
     ForumsPost,
-    '/forums/threads/<int:thread_id>/<string:post_id>'
+    '/forums/threads/<int:thread_id>/<string:post_id>',
 )
 api.add_resource(
     ForumsUser,
