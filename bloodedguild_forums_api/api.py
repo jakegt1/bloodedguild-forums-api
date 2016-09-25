@@ -14,7 +14,7 @@ from .config import config;
 DB_NAME = config["db_name"]
 USER = config["username"]
 PASSWORD = config["password"]
-GROUP_ADMINISTRATORS = ["Server Administrator", "Guild Master"]
+GROUP_ADMINISTRATORS = ["gm", "dev"]
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config["secret"]
 app.config['JWT_EXPIRATION_DELTA'] = timedelta(weeks=1)
@@ -316,7 +316,8 @@ class ForumsCategoriesInfo(Resource):
                 'type': 'user',
                 'id': sql_query[8],
                 'username': sql_query[10],
-                'avatar': sql_query[11]
+                'avatar': sql_query[11],
+                'group': sql_query[12]
             }
             post_response = {
                 'type': 'post',
@@ -341,7 +342,8 @@ class ForumsCategoriesInfo(Resource):
         sql_string = "select * from subcategories_thread_counts "
         sql_string += "LEFT JOIN subcategories_main on "
         sql_string += "(subcategories_thread_counts.id = subcategories_main.id) "
-        sql_string += "where category_id = %s;"
+        sql_string += "where category_id = %s "
+        sql_string += "order by subcategories_thread_counts.id asc;"
         psql_cursor.execute(
             sql_string,
             (sql_query[0],)
@@ -436,12 +438,14 @@ class ForumsSubcategoryThreads(Resource):
             'type': 'user',
             'id': sql_query[6],
             'username': sql_query[7],
+            'group': sql_query[13]
         }
         user_post = {
             'type': 'user',
             'id': sql_query[9],
             'username': sql_query[10],
-            'avatar': sql_query[11]
+            'avatar': sql_query[11],
+            'group': sql_query[12]
         }
         return {
             'type': 'thread',
@@ -460,16 +464,20 @@ class ForumsSubcategoryThreads(Resource):
         psql_cursor = db.get_cursor()
         offset = int(thread_id)-1 #0 indexed
         sql_string = "select threads.*, t_users.username, posts.timestamp, "
-        sql_string += "posts.user_id, p_users.username , p_users.avatar"
+        sql_string += "posts.user_id, p_users.username , p_users.avatar, "
+        sql_string += "g_posts.name, g_threads.name "
         sql_string += "from threads, posts, "
-        sql_string += "users as t_users, users as p_users where "
+        sql_string += "users as t_users, users as p_users, "
+        sql_string += "groups as g_threads, groups as g_posts where "
         sql_string += "threads.subcategory_id = %s and "
         sql_string += "threads.id = posts.thread_id and "
         sql_string += "posts.id = ("
         sql_string += "select max (id) from posts where "
         sql_string += "posts.thread_id = threads.id) "
         sql_string += "and t_users.id = threads.user_id and "
-        sql_string += "p_users.id = posts.user_id "
+        sql_string += "p_users.id = posts.user_id and "
+        sql_string += "g_posts.id = p_users.group_id and "
+        sql_string += "g_threads.id = t_users.group_id "
         sql_string += "order by posts.timestamp desc "
         sql_string += "limit 1 "
         sql_string += "offset %s;"
@@ -490,16 +498,20 @@ class ForumsSubcategoryThreads(Resource):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         sql_string = "select threads.*, t_users.username, posts.timestamp, "
-        sql_string += "posts.user_id, p_users.username, p_users.avatar "
+        sql_string += "posts.user_id, p_users.username , p_users.avatar, "
+        sql_string += "g_posts.name, g_threads.name "
         sql_string += "from threads, posts, "
-        sql_string += "users as t_users, users as p_users where "
+        sql_string += "users as t_users, users as p_users, "
+        sql_string += "groups as g_threads, groups as g_posts where "
         sql_string += "threads.subcategory_id = %s and "
         sql_string += "threads.id = posts.thread_id and "
         sql_string += "posts.id = ("
         sql_string += "select max (id) from posts where "
         sql_string += "posts.thread_id = threads.id) "
         sql_string += "and t_users.id = threads.user_id and "
-        sql_string += "p_users.id = posts.user_id "
+        sql_string += "p_users.id = posts.user_id and "
+        sql_string += "g_posts.id = p_users.group_id and "
+        sql_string += "g_threads.id = t_users.group_id "
         sql_string += "order by posts.timestamp desc "
         sql_string += "limit %s "
         sql_string += "offset %s;"
@@ -839,18 +851,28 @@ class ForumsModifyPost(ValidatorResource):
     method_decorators = [jwt_required()]
     def patch(self, thread_id, post_id):
         json_data = self.validate_json(request.get_json())
-        offset = int(thread_id)-1 #0 indexed
+        offset = int(post_id)-1 #0 indexed
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
+        print(offset)
+        print(thread_id)
         sql_string = "select posts.id, posts.user_id from posts "
         sql_string += "where posts.thread_id = %s "
+        sql_string += "order by posts.timestamp asc "
         sql_string += "limit 1 "
         sql_string += "offset %s;"
+        print(sql_string)
         psql_cursor.execute(
             sql_string,
             (thread_id, offset)
         )
         post = psql_cursor.fetchone()
+        if(not post):
+            abort(
+                404,
+                message={"error": "post did not exist"}
+            )
+        print(post)
         true_post_id = post[0]
         user_id = post[1]
         if(current_identity.id != user_id):
