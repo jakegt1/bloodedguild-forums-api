@@ -2,14 +2,14 @@ from flask import Flask, jsonify, request, make_response
 from flask_jwt import JWT, jwt_required, current_identity
 from flask_restful import Resource, Api, abort
 from datetime import datetime, timedelta
-from .clean_html import clean_html
+from clean_html import clean_html
 import sqlite3 as sql
 import re
 import sys
 import hashlib
 import psycopg2
 from psycopg2.extras import DictCursor
-from .config import config;
+from config import config;
 
 DB_NAME = config["db_name"]
 USER = config["username"]
@@ -179,7 +179,7 @@ class ForumsUser(Resource):
         db.close()
         return user
 
-class ForumsPatchUser(Resource):
+class ForumsModifyUser(Resource):
     method_decorators = [jwt_required()]
     def validate_json(self, json_data):
         if(not json_data):
@@ -552,9 +552,9 @@ class ForumsSubcategoryThreads(Resource):
                 )
             else:
                 error_message = "Minimum ID given was larger than Maximum ID."
-                abort(400, message={"error": error_message})
+                abort(400, message="Error:"+error_message)
         else:
-            abort(400, message={"error": "thread id did not match regex"})
+            abort(400, message="Error: thread id did not match regex")
         return response
 
 
@@ -756,12 +756,12 @@ class ForumsAddPost(ValidatorResource):
                 )
             )
         except psycopg2.IntegrityError:
-            abort(400, message="error: Database failed to execute insert.")
+            abort(400, message="Error: Database failed to execute insert.")
         locked = psql_cursor.fetchone()[0]
         psql_cursor.close()
         if(locked):
             db.rollback()
-            abort(400, message="error: Thread given was locked.")
+            abort(400, message="Error: Thread given was locked.")
         db.close()
         return {
             'thread': thread_id,
@@ -853,9 +853,9 @@ class ForumsPost(Resource):
                 )
             else:
                 error_message = "Minimum ID given was larger than Maximum ID."
-                abort(400, message={"error": error_message})
+                abort(400, message="Error: "+error_message)
         else:
-            abort(400, message={"error": "post id did not match regex"})
+            abort(400, message="Error: post id did not match regex")
         return response
 
 class ForumsModifyPost(ValidatorResource):
@@ -878,19 +878,21 @@ class ForumsModifyPost(ValidatorResource):
         if(not post):
             abort(
                 404,
-                message={"error": "post did not exist"}
+                message="Error: post did not exist"
             )
         true_post_id = post[0]
         user_id = post[1]
         if(current_identity.id != user_id):
             abort(
                 400,
-                message={"error": "user logged in did not make this post"}
+                message="Error: user logged in did not make this post"
             )
         sql_string = "update posts set (content, edited_timestamp) = "
         sql_string += "(%s, "
         sql_string += "now() at time zone 'utc') where "
-        sql_string += "posts.id = %s;"
+        sql_string += "posts.id = %s returning "
+        sql_string += "(select locked from threads "
+        sql_string += "where threads.id = posts.thread_id)"
         try:
             psql_cursor.execute(
                 sql_string,
@@ -901,7 +903,11 @@ class ForumsModifyPost(ValidatorResource):
             )
         except psycopg2.IntegrityError:
             abort(400, message="Error: Database failed to execute insert.")
+        locked = psql_cursor.fetchone()[0]
         psql_cursor.close()
+        if(locked):
+            db.rollback()
+            abort(400, message="Error: Thread was locked.")
         db.close()
         return {
             "type": "post",
@@ -996,7 +1002,7 @@ api.add_resource(
     resource_class_args=users_required_fields
 )
 api.add_resource(
-    ForumsPatchUser,
+    ForumsModifyUser,
     '/forums/users'
 )
 if __name__ == '__main__':
