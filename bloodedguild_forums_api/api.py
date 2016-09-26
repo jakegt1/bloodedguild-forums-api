@@ -719,6 +719,7 @@ class ForumsThread(ValidatorResource):
             'title': sql_query[1],
             'timestamp': sql_query[2].isoformat(),
             'locked': sql_query[3],
+            'sticky': sql_query[4],
             'post_count': get_post_count(sql_query[0]),
             'user': user,
             'subcategory': subcategory,
