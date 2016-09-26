@@ -57,8 +57,6 @@ def identity(payload):
         (payload["identity"],)
     )
     user_data = psql_cursor.fetchone()
-
-    print(user_data)
     return User(user_data[0], user_data[1], user_data[2])
 
 jwt = JWT(app, authenticate, identity)
@@ -263,7 +261,6 @@ class ForumsAddUser(ValidatorResource):
             )
         if(not regex_user_name.match(user_name)):
             abort(400, message="Error: Username had bad characters.")
-        print(regex_user_name.match(user_name))
 
     def put(self):
         json_data = self.validate_json(request.get_json())
@@ -637,6 +634,8 @@ class ForumsModifyThread(ValidatorResource):
             )
         except psycopg2.IntegrityError:
             abort(400, message="Error: Database failed to execute insert.")
+        psql_cursor.close()
+        db.close()
         return {
             "type": "thread",
             "id": thread_id,
@@ -652,15 +651,17 @@ class ForumsModifyThread(ValidatorResource):
             )
         db = DatabaseConnector()
         sql_string = "delete from threads where "
-        sql_string += "threads.id = %s;"
+        sql_string += "id = %s;"
         psql_cursor = db.get_cursor()
         try:
             psql_cursor.execute(
                 sql_string,
-                (thread_id)
+                (thread_id,)
             )
         except psycopg2.IntegrityError:
             abort(400, message="Error: Database failed to execute insert.")
+        psql_cursor.close()
+        db.close()
         return {
             "type": "thread",
             "id": thread_id,
@@ -717,7 +718,6 @@ class ForumsThread(ValidatorResource):
             (thread_id,)
         )
         forum_thread = psql_cursor.fetchone()
-        print(forum_thread)
         psql_cursor.close()
         db.close()
         response = []
@@ -819,7 +819,6 @@ class ForumsPost(Resource):
             )
         )
         forum_posts = psql_cursor.fetchall()
-        print(forum_posts)
         psql_cursor.close()
         db.close()
         return [self.construct_response(post) for post in forum_posts]
@@ -854,14 +853,11 @@ class ForumsModifyPost(ValidatorResource):
         offset = int(post_id)-1 #0 indexed
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        print(offset)
-        print(thread_id)
         sql_string = "select posts.id, posts.user_id from posts "
         sql_string += "where posts.thread_id = %s "
         sql_string += "order by posts.timestamp asc "
         sql_string += "limit 1 "
         sql_string += "offset %s;"
-        print(sql_string)
         psql_cursor.execute(
             sql_string,
             (thread_id, offset)
@@ -872,7 +868,6 @@ class ForumsModifyPost(ValidatorResource):
                 404,
                 message={"error": "post did not exist"}
             )
-        print(post)
         true_post_id = post[0]
         user_id = post[1]
         if(current_identity.id != user_id):
