@@ -109,6 +109,10 @@ class DatabaseConnector():
     def get_cursor(self):
         return self.connection.cursor()
 
+    def rollback(self):
+        self.connection.rollback()
+        self.connection.close()
+
     def close(self):
         self.connection.commit()
         self.connection.close()
@@ -738,22 +742,30 @@ class ForumsAddPost(ValidatorResource):
         sql_string += "thread_id, "
         sql_string += "user_id"
         sql_string += ") "
-        sql_string += "VALUES (%s, %s, %s) RETURNING id;"
-        psql_cursor.execute(
-            sql_string,
-            (
-                clean_html(json_data["content"]),
-                thread_id,
-                current_identity.id
+        sql_string += "VALUES (%s, %s, %s) RETURNING "
+        sql_string += "(select locked from "
+        sql_string += "threads where threads.id = %s);"
+        try:
+            psql_cursor.execute(
+                sql_string,
+                (
+                    clean_html(json_data["content"]),
+                    thread_id,
+                    current_identity.id,
+                    thread_id
+                )
             )
-        )
-        new_id = psql_cursor.fetchone()[0]
+        except psycopg2.IntegrityError:
+            abort(400, message="error: Database failed to execute insert.")
+        locked = psql_cursor.fetchone()[0]
         psql_cursor.close()
+        if(locked):
+            db.rollback()
+            abort(400, message="error: Thread given was locked.")
         db.close()
         return {
             'thread': thread_id,
             'type': 'post',
-            'id': new_id,
             'status': 'created'
         }
 
