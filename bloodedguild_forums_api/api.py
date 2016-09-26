@@ -2,14 +2,14 @@ from flask import Flask, jsonify, request, make_response
 from flask_jwt import JWT, jwt_required, current_identity
 from flask_restful import Resource, Api, abort
 from datetime import datetime, timedelta
-from clean_html import clean_html
+from .clean_html import clean_html
 import sqlite3 as sql
 import re
 import sys
 import hashlib
 import psycopg2
 from psycopg2.extras import DictCursor
-from config import config;
+from .config import config;
 
 DB_NAME = config["db_name"]
 USER = config["username"]
@@ -40,6 +40,7 @@ class User(object):
         self.id = id
         self.username = username
         self.group = group
+
 
 def authenticate(username, password):
     auth_db = DatabaseAuth()
@@ -454,6 +455,7 @@ class ForumsSubcategoryThreads(Resource):
             'title': sql_query[1],
             'timestamp': sql_query[2].isoformat(),
             'locked': sql_query[3],
+            'sticky': sql_query[4],
             'user_thread': user_thread,
             'user_post': user_post,
             'post_count': get_post_count(sql_query[0]),
@@ -479,7 +481,7 @@ class ForumsSubcategoryThreads(Resource):
         sql_string += "p_users.id = posts.user_id and "
         sql_string += "g_posts.id = p_users.group_id and "
         sql_string += "g_threads.id = t_users.group_id "
-        sql_string += "order by posts.timestamp desc "
+        sql_string += "order by threads.sticky desc, posts.timestamp desc "
         sql_string += "limit 1 "
         sql_string += "offset %s;"
         psql_cursor.execute(
@@ -513,7 +515,7 @@ class ForumsSubcategoryThreads(Resource):
         sql_string += "p_users.id = posts.user_id and "
         sql_string += "g_posts.id = p_users.group_id and "
         sql_string += "g_threads.id = t_users.group_id "
-        sql_string += "order by posts.timestamp desc "
+        sql_string += "order by threads.sticky desc, posts.timestamp desc "
         sql_string += "limit %s "
         sql_string += "offset %s;"
         limit = (thread_max - thread_min) + 1
@@ -618,8 +620,25 @@ class ForumsAddThread(ValidatorResource):
         }
 
 
-class ForumsModifyThread(ValidatorResource):
+class ForumsModifyThread(Resource):
     method_decorators = [jwt_required()]
+    def validate_json(self, json_data):
+        if(not json_data):
+            abort(400, message="JSON data was empty.")
+        possible_fields = ["locked", "sticky"]
+        bad_fields = []
+        for field in json_data.keys():
+            if(field not in possible_fields):
+                bad_fields.append(field)
+        if(bad_fields):
+            error_string = "The JSON data had the following bad fields:"
+            for field in missing_fields:
+                error_string += field+","
+                error_string = error_string[:-1] #trim last comma
+                abort(400, message=error_string)
+        else:
+            return json_data
+
     def patch(self, thread_id):
         json_data = self.validate_json(request.get_json())
         if(current_identity.group not in GROUP_ADMINISTRATORS):
@@ -628,13 +647,15 @@ class ForumsModifyThread(ValidatorResource):
                 message="Error: This is for administrators only."
             )
         db = DatabaseConnector()
-        sql_string = "update threads set (locked) = (%s) where "
+        json_key = list(json_data.keys())[0]
+        json_value = json_data[json_key]
+        sql_string = "update threads set ("+ json_key + ") = (%s) where "
         sql_string += "threads.id = %s;"
         psql_cursor = db.get_cursor()
         try:
             psql_cursor.execute(
                 sql_string,
-                (json_data["locked"], thread_id)
+                (json_value, thread_id)
             )
         except psycopg2.IntegrityError:
             abort(400, message="Error: Database failed to execute insert.")
@@ -643,7 +664,7 @@ class ForumsModifyThread(ValidatorResource):
         return {
             "type": "thread",
             "id": thread_id,
-            "locked": json_data["locked"],
+            json_key: json_value,
             "status": "updated"
         }
 
@@ -929,7 +950,10 @@ def jwt_response_handler(access_token, identity):
 @app.after_request
 def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    response.headers.add(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Authorization'
+    )
     response.headers.add(
         'Access-Control-Allow-Methods',
         'GET,PUT,POST,DELETE,PATCH'
@@ -938,7 +962,6 @@ def after_request(response):
 
 api.add_resource(DefaultLocation, '/')
 threads_required_fields = ([["title", "content"]])
-threads_update_required_fields = ([["locked"]])
 posts_required_fields = ([["content"]])
 users_required_fields = ([[
     "f_name",
@@ -969,7 +992,6 @@ api.add_resource(
 api.add_resource(
     ForumsModifyThread,
     '/forums/threads/<int:thread_id>',
-    resource_class_args=threads_update_required_fields
 )
 api.add_resource(
     ForumsAddThread,
