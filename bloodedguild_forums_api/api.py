@@ -231,7 +231,7 @@ class ForumsModifyUser(Resource):
         db.close()
 
     def validate_avatar_link(self, link):
-        allowed_sites = ["imgur.com"]
+        allowed_sites = ["i.imgur.com"]
         from_allowed_site = False
         for site in allowed_sites:
             if(site in link):
