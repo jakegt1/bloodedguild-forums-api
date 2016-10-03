@@ -2,14 +2,18 @@ from flask import Flask, jsonify, request, make_response
 from flask_jwt import JWT, jwt_required, current_identity
 from flask_restful import Resource, Api, abort
 from datetime import datetime, timedelta
-from .clean_html import clean_html
 import sqlite3 as sql
 import re
 import sys
 import hashlib
 import psycopg2
 from psycopg2.extras import DictCursor
-from .config import config;
+from bloodedguild_forums_api.clean_html import clean_html
+testing = True
+if(not testing):
+    from bloodedguild_forums_api.config import config
+else:
+    from bloodedguild_forums_api.testing_config import config
 
 DB_NAME = config["db_name"]
 USER = config["username"]
