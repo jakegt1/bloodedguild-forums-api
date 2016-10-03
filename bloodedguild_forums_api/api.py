@@ -1,3 +1,4 @@
+from functools import wraps
 from flask import Flask, jsonify, request, make_response
 from flask_jwt import JWT, jwt_required, current_identity
 from flask_restful import Resource, Api, abort
@@ -38,13 +39,11 @@ def get_post_count(thread_id):
     db.close()
     return post_count
 
-
 class User(object):
     def __init__(self, id, username, group):
         self.id = id
         self.username = username
         self.group = group
-
 
 def authenticate(username, password):
     auth_db = DatabaseAuth()
@@ -65,6 +64,7 @@ def identity(payload):
     return User(user_data[0], user_data[1], user_data[2])
 
 jwt = JWT(app, authenticate, identity)
+
 
 class ValidatorResource(Resource):
     def __init__(self, required_fields=[]):
@@ -941,6 +941,17 @@ class ForumsModifyPost(ValidatorResource):
             "status": "updated"
         }
 
+class AuthRefresh(Resource):
+    method_decorators=[jwt_required()]
+    def get(self):
+        token = jwt.jwt_encode_callback(current_identity)
+        return {
+            'username': current_identity.username,
+            'id': current_identity.id,
+            'group': current_identity.group,
+            'access_token': token.decode('utf-8')
+        }
+
 @jwt.auth_response_handler
 def jwt_response_handler(access_token, identity):
     return jsonify(
@@ -957,7 +968,7 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
     response.headers.add(
         'Access-Control-Allow-Headers',
-        'Content-Type, Authorization'
+        'Content-Type, Authorization, Fresh-Token'
     )
     response.headers.add(
         'Access-Control-Allow-Methods',
@@ -1031,6 +1042,10 @@ api.add_resource(
 api.add_resource(
     ForumsModifyUser,
     '/forums/users'
+)
+api.add_resource(
+    AuthRefresh,
+    '/auth/refresh'
 )
 if __name__ == '__main__':
     app.run(debug=True)
