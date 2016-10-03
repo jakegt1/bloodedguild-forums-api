@@ -9,7 +9,7 @@ import hashlib
 import psycopg2
 from psycopg2.extras import DictCursor
 from bloodedguild_forums_api.clean_html import clean_html
-testing = True
+testing = False
 if(not testing):
     from bloodedguild_forums_api.config import config
 else:
