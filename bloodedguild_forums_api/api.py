@@ -17,9 +17,6 @@ if(not testing):
 else:
     from bloodedguild_forums_api.testing_config import config
 
-DB_NAME = config["db_name"]
-USER = config["username"]
-PASSWORD = config["password"]
 GROUP_ADMINISTRATORS = ["gm", "dev"]
 app = Flask(__name__)
 app.config['SECRET_KEY'] = config["secret"]
