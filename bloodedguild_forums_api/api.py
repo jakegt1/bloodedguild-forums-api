@@ -10,7 +10,11 @@ import hashlib
 import psycopg2
 from psycopg2.extras import DictCursor
 from bloodedguild_forums_api.clean_html import clean_html
-from bloodedguild_forums_api.db import DatabaseAuth, DatabaseConnector, DatabaseStringConstructor
+from bloodedguild_forums_api.db import (
+    DatabaseAuth,
+    DatabaseConnector,
+    DatabaseStringConstructor
+)
 testing = False
 if(not testing):
     from bloodedguild_forums_api.config import config
@@ -97,9 +101,10 @@ class ForumsUser(Resource):
     def get(self, user_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select * from "
-        sql_string += "users_post_counts "
-        sql_string += "where users_post_counts.id = %s;"
+        sql_string = "select U.id, U.f_name, U.l_name, U.username, U.email, "
+        sql_string += "U.avatar, U.post_count, U.group from "
+        sql_string += "users_post_counts as U "
+        sql_string += "where U.id = %s;"
         psql_cursor.execute(
             sql_string,
             (user_id,)
@@ -114,10 +119,10 @@ class ForumsUser(Resource):
                 'f_name': user[1],
                 'l_name': user[2],
                 'username': user[3],
-                'email': user[5],
-                'avatar': user[6],
-                'post_count': user[8],
-                'group': user[9]
+                'email': user[4],
+                'avatar': user[5],
+                'post_count': user[6],
+                'group': user[7]
             }
             user = [user_object]
         psql_cursor.close()
@@ -382,16 +387,16 @@ class ForumsSubcategoryThreads(Resource):
     def construct_response(self, sql_query):
         user_thread = {
             'type': 'user',
-            'id': sql_query[6],
-            'username': sql_query[7],
-            'group': sql_query[13]
+            'id': sql_query[5],
+            'username': sql_query[6],
+            'group': sql_query[12]
         }
         user_post = {
             'type': 'user',
-            'id': sql_query[9],
-            'username': sql_query[10],
-            'avatar': sql_query[11],
-            'group': sql_query[12]
+            'id': sql_query[8],
+            'username': sql_query[9],
+            'avatar': sql_query[10],
+            'group': sql_query[11]
         }
         return {
             'type': 'thread',
@@ -403,14 +408,16 @@ class ForumsSubcategoryThreads(Resource):
             'user_thread': user_thread,
             'user_post': user_post,
             'post_count': get_post_count(sql_query[0]),
-            'posts_timestamp': sql_query[8].isoformat(),
+            'posts_timestamp': sql_query[7].isoformat(),
         }
 
     def get_thread(self, subcategory_id, thread_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         offset = int(thread_id)-1 #0 indexed
-        sql_string = "select threads.*, t_users.username, posts.timestamp, "
+        sql_string = "select threads.id, threads.title, threads.timestamp, "
+        sql_string += "threads.locked, threads.sticky, threads.user_id, "
+        sql_string += "t_users.username, posts.timestamp, "
         sql_string += "posts.user_id, p_users.username , p_users.avatar, "
         sql_string += "g_posts.name, g_threads.name "
         sql_string += "from threads, posts, "
@@ -444,7 +451,9 @@ class ForumsSubcategoryThreads(Resource):
     def get_threads(self, subcategory_id, thread_min, thread_max):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select threads.*, t_users.username, posts.timestamp, "
+        sql_string = "select threads.id, threads.title, threads.timestamp, "
+        sql_string += "threads.locked, threads.sticky, threads.user_id, "
+        sql_string += "t_users.username, posts.timestamp, "
         sql_string += "posts.user_id, p_users.username , p_users.avatar, "
         sql_string += "g_posts.name, g_threads.name "
         sql_string += "from threads, posts, "
@@ -643,19 +652,19 @@ class ForumsThread(ValidatorResource):
     def construct_response(self, sql_query):
         user = {
             'type': 'user',
-            'id': sql_query[6],
-            'username': sql_query[10],
-            'group': sql_query[16]
+            'id': sql_query[5],
+            'username': sql_query[6],
+            'group': sql_query[7]
         }
         subcategory = {
             'type': 'subcategory',
-            'id': sql_query[17],
-            'title': sql_query[18]
+            'id': sql_query[8],
+            'title': sql_query[9]
         }
         category = {
             'type': 'category',
-            'id': sql_query[19],
-            'title': sql_query[20]
+            'id': sql_query[10],
+            'title': sql_query[11]
         }
         return {
             'type': 'thread',
@@ -673,8 +682,10 @@ class ForumsThread(ValidatorResource):
     def get(self, thread_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select threads.*, "
-        sql_string += "users_post_counts.*, "
+        sql_string = "select threads.id, threads.title, threads.timestamp, "
+        sql_string += "threads.locked, threads.sticky, "
+        sql_string += "users_post_counts.id, users_post_counts.username, "
+        sql_string += "users_post_counts.group_id, "
         sql_string += "subcategories.id, subcategories.title, "
         sql_string += "categories.id, categories.title FROM "
         sql_string += "threads, users_post_counts, "
@@ -739,11 +750,11 @@ class ForumsPost(Resource):
     def construct_response(self, sql_query):
         user = {
             'type': 'user',
-            'id': sql_query[5],
-            'username': sql_query[9],
-            'avatar': sql_query[12],
-            'post_count': sql_query[14],
-            'group': sql_query[15]
+            'id': sql_query[4],
+            'username': sql_query[5],
+            'avatar': sql_query[6],
+            'post_count': sql_query[7],
+            'group': sql_query[8]
         }
         return {
             'type': 'post',
@@ -758,10 +769,13 @@ class ForumsPost(Resource):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         offset = int(post_id)-1 #offset is 0 indexed
-        sql_string = "select * from posts, users_post_counts "
-        sql_string += "where posts.thread_id = %s and "
-        sql_string += "users_post_counts.id = posts.user_id "
-        sql_string += "order by posts.id "
+        sql_string = "select P.id, P.content, P.timestamp, "
+        sql_string += "P.edited_timestamp, U.id, U.username, U.avatar, "
+        sql_string += "U.post_count, U.group, "
+        sql_string += "from posts as P, users_post_counts as U "
+        sql_string += "where P.thread_id = %s and "
+        sql_string += "U.id = P.user_id "
+        sql_string += "order by P.id "
         sql_string += "limit 1 "
         sql_string += "offset %s;"
         psql_cursor.execute(
@@ -780,10 +794,13 @@ class ForumsPost(Resource):
     def get_posts(self, thread_id, post_min, post_max):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select * from posts, users_post_counts "
-        sql_string += "where posts.thread_id = %s and "
-        sql_string += "users_post_counts.id = posts.user_id "
-        sql_string += "order by posts.id "
+        sql_string = "select P.id, P.content, P.timestamp, "
+        sql_string += "P.edited_timestamp, U.id, U.username, U.avatar, "
+        sql_string += "U.post_count, U.group, "
+        sql_string += "from posts as P, users_post_counts as U "
+        sql_string += "where P.thread_id = %s and "
+        sql_string += "U.id = P.user_id "
+        sql_string += "order by P.id "
         sql_string += "limit %s "
         sql_string += "offset %s;"
         limit = (post_max - post_min) + 1
