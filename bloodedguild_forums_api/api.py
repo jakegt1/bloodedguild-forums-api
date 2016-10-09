@@ -102,7 +102,7 @@ class ForumsUser(Resource):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         sql_string = "select U.id, U.f_name, U.l_name, U.username, U.email, "
-        sql_string += "U.avatar, U.post_count, U.group from "
+        sql_string += "U.avatar, U.signature, U.count, U.name from "
         sql_string += "users_post_counts as U "
         sql_string += "where U.id = %s;"
         psql_cursor.execute(
@@ -121,8 +121,9 @@ class ForumsUser(Resource):
                 'username': user[3],
                 'email': user[4],
                 'avatar': user[5],
-                'post_count': user[6],
-                'group': user[7]
+                'signature': user[6],
+                'post_count': user[7],
+                'group': user[8]
             }
             user = [user_object]
         psql_cursor.close()
@@ -134,7 +135,7 @@ class ForumsModifyUser(Resource):
     def validate_json(self, json_data):
         if(not json_data):
             abort(400, message="JSON data was empty.")
-        possible_fields = ["password_hash", "avatar"]
+        possible_fields = ["password_hash", "avatar", "signature"]
         bad_fields = []
         for field in json_data.keys():
             if(field not in possible_fields):
@@ -154,19 +155,16 @@ class ForumsModifyUser(Resource):
         json_keys = list(json_data.keys())
         sql_arguments = []
         sql_string = "update users set ("
-        if(len(json_data) > 1):
-            sql_string += "password_hash, avatar) = ("
-            sql_string += "crypt(%s, gen_salt('bf', 8)), %s) where "
+        sql_string += json_keys[0] + ") = ("
+        if("password_hash" in json_keys):
+            sql_string += "crypt(%s, gen_salt('bf', 8))) where "
             sql_arguments.append(json_data["password_hash"])
+        elif("avatar" in json_keys):
+            sql_string += "%s) where "
             sql_arguments.append(json_data["avatar"])
         else:
-            sql_string += json_keys[0] + ") = ("
-            if("password_hash" in json_keys):
-                sql_string += "crypt(%s, gen_salt('bf', 8))) where "
-                sql_arguments.append(json_data["password_hash"])
-            else:
-                sql_string += "%s) where "
-                sql_arguments.append(json_data["avatar"])
+            sql_string += "%s) where "
+            sql_arguments.append(json_data["signature"])
         sql_string += "id = %s;"
         sql_arguments.append(current_identity.id)
         try:
@@ -754,7 +752,8 @@ class ForumsPost(Resource):
             'username': sql_query[5],
             'avatar': sql_query[6],
             'post_count': sql_query[7],
-            'group': sql_query[8]
+            'group': sql_query[8],
+            'signature': sql_query[9]
         }
         return {
             'type': 'post',
@@ -771,7 +770,7 @@ class ForumsPost(Resource):
         offset = int(post_id)-1 #offset is 0 indexed
         sql_string = "select P.id, P.content, P.timestamp, "
         sql_string += "P.edited_timestamp, U.id, U.username, U.avatar, "
-        sql_string += "U.post_count, U.group, "
+        sql_string += "U.count, U.name, U.signature "
         sql_string += "from posts as P, users_post_counts as U "
         sql_string += "where P.thread_id = %s and "
         sql_string += "U.id = P.user_id "
@@ -796,7 +795,7 @@ class ForumsPost(Resource):
         psql_cursor = db.get_cursor()
         sql_string = "select P.id, P.content, P.timestamp, "
         sql_string += "P.edited_timestamp, U.id, U.username, U.avatar, "
-        sql_string += "U.post_count, U.group, "
+        sql_string += "U.count, U.name, U.signature "
         sql_string += "from posts as P, users_post_counts as U "
         sql_string += "where P.thread_id = %s and "
         sql_string += "U.id = P.user_id "
