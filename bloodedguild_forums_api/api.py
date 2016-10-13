@@ -198,6 +198,8 @@ class ForumsModifyUser(Resource):
                 json_data['avatar']
             )
             response['avatar'] = json_data['avatar']
+        if('signature' in json_data):
+            json_data['signature'] = clean_html(json_data['signature'])
         self.run_sql_query(json_data)
         response['type'] = 'user'
         response['status'] = 'updated'
