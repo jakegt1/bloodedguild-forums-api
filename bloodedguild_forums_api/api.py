@@ -524,6 +524,8 @@ class ForumsAddThread(ValidatorResource):
     method_decorators = [jwt_required()]
     def put(self, subcategory_id):
         json_data = self.validate_json(request.get_json())
+        if(not json_data["title"]):
+            abort(401, message="Error: Title is blank.")
         db = DatabaseConnector()
         sql_string = "insert into threads "
         sql_string += "("
