@@ -1,11 +1,24 @@
 import psycopg2
 from datetime import timedelta
 from flask import Flask, jsonify, request, make_response
-from flask_jwt import JWT, current_identity
+from flask_restful import Resource
+from flask_jwt import JWT, current_identity, jwt_required
 from bloodedguild_forums_api.db import (
     DatabaseAuth,
     DatabaseConnector
 )
+
+class AuthRefresh(Resource):
+    jwt = None
+    method_decorators = [jwt_required()]
+    def get(self):
+        token = self.jwt.jwt_encode_callback(current_identity)
+        return {
+            'username': current_identity.username,
+            'id': current_identity.id,
+            'group': current_identity.group,
+            'access_token': token.decode('utf-8')
+        }
 
 class User(object):
     def __init__(self, id, username, group):
@@ -53,3 +66,5 @@ class JWTConstructor():
                 }
             )
         return jwt_response_handler
+
+

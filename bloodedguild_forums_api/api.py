@@ -873,17 +873,6 @@ class ForumsModifyPost(ValidatorResource):
             "status": "updated"
         }
 
-class AuthRefresh(Resource):
-    method_decorators=[jwt_required()]
-    def get(self):
-        token = jwt.jwt_encode_callback(current_identity)
-        return {
-            'username': current_identity.username,
-            'id': current_identity.id,
-            'group': current_identity.group,
-            'access_token': token.decode('utf-8')
-        }
-
 @app.after_request
 def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
@@ -963,10 +952,6 @@ api.add_resource(
 api.add_resource(
     ForumsModifyUser,
     '/forums/users'
-)
-api.add_resource(
-    AuthRefresh,
-    '/auth/refresh'
 )
 if __name__ == '__main__':
     app.run(debug=True)

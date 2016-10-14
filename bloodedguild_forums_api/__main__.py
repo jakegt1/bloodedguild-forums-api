@@ -3,7 +3,7 @@ from bloodedguild_forums_api.db import (
     DatabaseConnector,
     DatabaseStringConstructor
 )
-from bloodedguild_forums_api.jwt_constructor import JWTConstructor
+from bloodedguild_forums_api.jwt_util import JWTConstructor
 testing = False
 if(not testing):
     from bloodedguild_forums_api.config import config
