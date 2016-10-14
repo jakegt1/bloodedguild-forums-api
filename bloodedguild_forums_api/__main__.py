@@ -4,7 +4,7 @@ from bloodedguild_forums_api.db import (
     DatabaseStringConstructor
 )
 from bloodedguild_forums_api.jwt_util import JWTConstructor
-testing = False
+testing = True
 if(not testing):
     from bloodedguild_forums_api.config import config
 else:

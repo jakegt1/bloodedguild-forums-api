@@ -25,12 +25,6 @@ GROUP_ADMINISTRATORS = ["gm", "dev"]
 app = Flask(__name__)
 api = Api(app)
 
-DatabaseConnector.db_string_constructor = DatabaseStringConstructor(
-    config["db_name"],
-    config["username"],
-    config["password"]
-)
-
 def get_post_count(thread_id):
     db = DatabaseConnector()
     psql_cursor = db.get_cursor()
