@@ -1,6 +1,6 @@
 from functools import wraps
 from flask import Flask, jsonify, request, make_response
-from flask_jwt import JWT, jwt_required, current_identity
+from flask_jwt import jwt_required, current_identity
 from flask_restful import Resource, Api, abort
 from datetime import datetime, timedelta
 import sqlite3 as sql
@@ -23,8 +23,6 @@ else:
 
 GROUP_ADMINISTRATORS = ["gm", "dev"]
 app = Flask(__name__)
-app.config['SECRET_KEY'] = config["secret"]
-app.config['JWT_EXPIRATION_DELTA'] = timedelta(weeks=1)
 api = Api(app)
 
 DatabaseConnector.db_string_constructor = DatabaseStringConstructor(
@@ -46,32 +44,6 @@ def get_post_count(thread_id):
     psql_cursor.close()
     db.close()
     return post_count
-
-class User(object):
-    def __init__(self, id, username, group):
-        self.id = id
-        self.username = username
-        self.group = group
-
-def authenticate(username, password):
-    auth_db = DatabaseAuth()
-    check_auth = auth_db.check_auth(username, password)
-    if check_auth:
-        return User(check_auth[0], check_auth[1], check_auth[2])
-
-def identity(payload):
-    db = DatabaseConnector()
-    psql_cursor = db.get_cursor()
-    sql_string = "select id, username, name from users_post_counts "
-    sql_string += "where id = %s"
-    psql_cursor.execute(
-        sql_string,
-        (payload["identity"],)
-    )
-    user_data = psql_cursor.fetchone()
-    return User(user_data[0], user_data[1], user_data[2])
-
-jwt = JWT(app, authenticate, identity)
 
 class ValidatorResource(Resource):
     def __init__(self, required_fields=[]):
@@ -911,17 +883,6 @@ class AuthRefresh(Resource):
             'group': current_identity.group,
             'access_token': token.decode('utf-8')
         }
-
-@jwt.auth_response_handler
-def jwt_response_handler(access_token, identity):
-    return jsonify(
-        {
-            'access_token': access_token.decode('utf-8'),
-            'username': identity.username,
-            'id': identity.id,
-            'group': identity.group
-        }
-    )
 
 @app.after_request
 def after_request(response):
