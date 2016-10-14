@@ -13,7 +13,7 @@ class User(object):
         self.username = username
         self.group = group
 
-class JWT_Constructor():
+class JWTConstructor():
     def __init__(self, app, secret_key):
         app.config['SECRET_KEY'] = secret_key
         app.config['JWT_EXPIRATION_DELTA'] = timedelta(weeks=1)

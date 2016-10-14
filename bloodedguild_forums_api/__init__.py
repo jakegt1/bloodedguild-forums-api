@@ -1,10 +1,25 @@
 from bloodedguild_forums_api.api import app
-from bloodedguild_forums_api.jwt_constructor import JWT_Constructor
-from bloodedguild_forums_api.config import config
-jwt_object = JWT_Constructor(app, config["secret"])
+from bloodedguild_forums_api.db import (
+    DatabaseConnector,
+    DatabaseStringConstructor
+)
+from bloodedguild_forums_api.jwt_constructor import JWTConstructor
+testing = False
+if(not testing):
+    from bloodedguild_forums_api.config import config
+else:
+    from bloodedguild_forums_api.testing_config import config
+
+DatabaseConnector.db_string_constructor = DatabaseStringConstructor(
+    config["db_name"],
+    config["username"],
+    config["password"]
+)
+
+jwt_object = JWTConstructor(app, config["secret"])
 jwt = jwt_object.create_jwt()
 response_handler = jwt_object.get_response_handler()
-@jwt.jwt_response_handler
+@jwt.auth_response_handler
 def jwt_response_handler(access_token, identity):
     return response_handler(access_token, identity)
 
