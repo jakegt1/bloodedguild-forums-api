@@ -1,7 +1,7 @@
 import psycopg2
 from datetime import timedelta
 from flask import Flask, jsonify, request, make_response
-from flask_jwt import JWT, jwt_required, current_identity
+from flask_jwt import JWT, current_identity
 from bloodedguild_forums_api.db import (
     DatabaseAuth,
     DatabaseConnector
