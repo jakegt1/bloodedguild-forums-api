@@ -681,6 +681,7 @@ class ForumsAddPost(ValidatorResource):
         json_data = self.validate_json(request.get_json())
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
+        new_post_id = get_post_count(thread_id) + 1
         sql_string = "insert into posts "
         sql_string += "("
         sql_string += "content, "
@@ -711,7 +712,8 @@ class ForumsAddPost(ValidatorResource):
         return {
             'thread': thread_id,
             'type': 'post',
-            'status': 'created'
+            'status': 'created',
+            'post_id': new_post_id
         }
 
 class ForumsPost(Resource):
