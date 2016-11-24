@@ -19,7 +19,7 @@ setup(
     #packages = ['bloodedguild_api','bloodedguild_api.api'],
     keywords = "example documentation tutorial",
     url = "bloodedguild_forums_api",
-    long_description=read('README'),
+    long_description=read('README.md'),
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Topic :: Utilities",

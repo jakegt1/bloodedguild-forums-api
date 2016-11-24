@@ -716,6 +716,52 @@ class ForumsAddPost(ValidatorResource):
             'post_id': new_post_id
         }
 
+class ForumsLatestPosts(Resource):
+    def construct_response(self, sql_query):
+        user = {
+            'type': 'user',
+            'id': sql_query[3],
+            'username': sql_query[4],
+            'avatar': sql_query[5],
+            'group': sql_query[6]
+        }
+        thread = {
+            'type': 'thread',
+            'id': sql_query[7],
+            'title': sql_query[8]
+        }
+        return {
+            'type': 'post',
+            'id': sql_query[0],
+            'content': sql_query[1],
+            'timestamp': sql_query[2].isoformat(),
+            'user': user,
+            'thread': thread
+        }
+
+    def get(self, amount):
+        db = DatabaseConnector()
+        psql_cursor = db.get_cursor()
+        sql_string = "select P.id, P.content, P.timestamp, "
+        sql_string += "U.id, U.username, U.avatar, U.name, "
+        sql_string += "T.id, T.title "
+        sql_string += "from posts as P, users_post_counts as U, "
+        sql_string += "threads as T "
+        sql_string += "where P.thread_id = T.id and "
+        sql_string += "U.id = P.user_id "
+        sql_string += "order by P.id desc "
+        sql_string += "limit %s; "
+        psql_cursor.execute(
+            sql_string,
+            (amount,)
+        )
+        forum_posts = psql_cursor.fetchall()
+        forum_posts = [self.construct_response(post) for post in forum_posts]
+        psql_cursor.close()
+        db.close()
+        return forum_posts
+
+
 class ForumsPost(Resource):
     def construct_response(self, sql_query):
         user = {
@@ -948,6 +994,10 @@ api.add_resource(
 api.add_resource(
     ForumsModifyUser,
     '/forums/users'
+)
+api.add_resource(
+    ForumsLatestPosts,
+    '/forums/posts/<int:amount>'
 )
 if __name__ == '__main__':
     app.run(debug=True)
