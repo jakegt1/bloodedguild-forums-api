@@ -249,7 +249,7 @@ class ForumsCategoriesInfo(Resource):
             'id': sql_query[0],
             'title': sql_query[1],
             'description': sql_query[2],
-            'thread_count': sql_query[4],
+            'thread_count': int(sql_query[4]),
             'post': post_response
         }
 
