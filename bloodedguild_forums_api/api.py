@@ -653,7 +653,7 @@ class ForumsThread(ValidatorResource):
         sql_string = "select threads.id, threads.title, threads.timestamp, "
         sql_string += "threads.locked, threads.sticky, "
         sql_string += "users_post_counts.id, users_post_counts.username, "
-        sql_string += "users_post_counts.group_id, "
+        sql_string += "users_post_counts.name, "
         sql_string += "subcategories.id, subcategories.title, "
         sql_string += "categories.id, categories.title FROM "
         sql_string += "threads, users_post_counts, "
