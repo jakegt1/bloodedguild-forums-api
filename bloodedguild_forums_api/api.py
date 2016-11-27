@@ -8,6 +8,7 @@ import re
 import sys
 import hashlib
 import psycopg2
+from threading import Timer
 from psycopg2.extras import DictCursor
 from bloodedguild_forums_api.clean_html import clean_html
 from bloodedguild_forums_api.db import (
@@ -15,7 +16,9 @@ from bloodedguild_forums_api.db import (
     DatabaseConnector,
     DatabaseStringConstructor
 )
+from bloodedguild_forums_api.blizzard import BlizzardClient
 testing = False
+from bloodedguild_forums_api.config import blizzard
 if(not testing):
     from bloodedguild_forums_api.config import config
 else:
@@ -23,7 +26,22 @@ else:
 
 GROUP_ADMINISTRATORS = ["gm", "dev"]
 app = Flask(__name__)
+blizzard_client = BlizzardClient(
+    blizzard["realm"],
+    blizzard["apikey"],
+    blizzard["character"]
+)
 api = Api(app)
+
+#There has to be a better way to do this.
+current_timer = None
+
+def start_timer():
+    blizzard_client.store_guild_progress()
+    current_timer = Timer(86400, start_timer)
+    current_timer.start()
+
+start_timer()
 
 def get_post_count(thread_id):
     db = DatabaseConnector()
@@ -57,6 +75,7 @@ class ValidatorResource(Resource):
                 abort(400, message=error_string)
         else:
             return json_data
+
 
 class DefaultLocation(Resource):
     def get(self):
@@ -915,6 +934,10 @@ class ForumsModifyPost(ValidatorResource):
             "status": "updated"
         }
 
+class ForumsProgress(Resource):
+    def get(self):
+        return blizzard_client.progress
+
 @app.after_request
 def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
@@ -929,6 +952,7 @@ def after_request(response):
     return response
 
 api.add_resource(DefaultLocation, '/')
+blizzard_required_fields = ([["secret"]])
 threads_required_fields = ([["title", "content"]])
 posts_required_fields = ([["content"]])
 users_required_fields = ([[
@@ -998,6 +1022,10 @@ api.add_resource(
 api.add_resource(
     ForumsLatestPosts,
     '/forums/posts/<int:amount>'
+)
+api.add_resource(
+    ForumsProgress,
+    '/forums/progress'
 )
 if __name__ == '__main__':
     app.run(debug=True)
