@@ -26,6 +26,7 @@ else:
     from bloodedguild_forums_api.testing_config import config
 
 GROUP_ADMINISTRATORS = ["gm", "dev"]
+GROUP_VERIFIED = ["gm", "dev", "verified"]
 app = Flask(__name__)
 blizzard_client = BlizzardClient(
     blizzard["realm"],
@@ -246,6 +247,7 @@ class ForumsAddUser(ValidatorResource):
 
 
 class ForumsCategoriesInfo(Resource):
+    method_decorators=[jwt_optional()]
     def construct_subquery_response(self, sql_query):
         post_response = {}
         if(sql_query[5]):
@@ -304,7 +306,11 @@ class ForumsCategoriesInfo(Resource):
     def get(self):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select * from categories;"
+        sql_string = "select * from categories where restricted=false "
+        if(current_identity):
+            if(current_identity.group in GROUP_VERIFIED):
+                sql_string = "select * from categories "
+        sql_string += "order by id;"
         psql_cursor.execute(
             sql_string
         )
