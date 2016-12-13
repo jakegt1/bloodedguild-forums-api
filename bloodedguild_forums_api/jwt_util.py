@@ -1,8 +1,15 @@
 import psycopg2
 from datetime import timedelta
-from flask import Flask, jsonify, request, make_response
+from functools import wraps
+from flask import Flask, jsonify, request, make_response, current_app
 from flask_restful import Resource
-from flask_jwt import JWT, current_identity, jwt_required
+from flask_jwt import (
+    JWT,
+    current_identity,
+    jwt_required,
+    _jwt_required,
+    JWTError
+)
 from bloodedguild_forums_api.db import (
     DatabaseAuth,
     DatabaseConnector
@@ -67,4 +74,14 @@ class JWTConstructor():
             )
         return jwt_response_handler
 
-
+def jwt_optional(realm=None):
+    def wrapper(fn):
+        @wraps(fn)
+        def decorator(*args, **kwargs):
+            try:
+                _jwt_required(realm or current_app.config['JWT_DEFAULT_REALM'])
+            except JWTError:
+                pass
+            return fn(*args, **kwargs)
+        return decorator
+    return wrapper

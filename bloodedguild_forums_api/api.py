@@ -16,6 +16,7 @@ from bloodedguild_forums_api.db import (
     DatabaseConnector,
     DatabaseStringConstructor
 )
+from bloodedguild_forums_api.jwt_util import jwt_optional
 from bloodedguild_forums_api.blizzard import BlizzardClient
 testing = False
 from bloodedguild_forums_api.config import blizzard
