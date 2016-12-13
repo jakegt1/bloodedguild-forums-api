@@ -12,7 +12,7 @@ setup(
     name = "bloodedguild-forums-api",
     version = "0.0.1",
     author = "Jake Torrance",
-    author_email = "andrewjcarter@gmail.com",
+    author_email = "jaket1234@hotmail.com",
     packages = find_packages(),
     description = ("An demonstration of how to create, document, and publish "
                                    "to the cheese shop a5 pypi.org."),
