@@ -117,6 +117,7 @@ class ForumsUser(Resource):
         db.close()
         return user
 
+
 class ForumsModifyUser(Resource):
     method_decorators = [jwt_required()]
     def validate_json(self, json_data):
@@ -192,6 +193,7 @@ class ForumsModifyUser(Resource):
         response['status'] = 'updated'
         return response
 
+
 class ForumsAddUser(ValidatorResource):
     def validate_user_name(self, user_name):
         regex_user_name = re.compile(r'^[0-9a-zA-Z_]+$')
@@ -247,7 +249,7 @@ class ForumsAddUser(ValidatorResource):
 
 
 class ForumsCategoriesInfo(Resource):
-    method_decorators=[jwt_optional()]
+    method_decorators = [jwt_optional()]
     def construct_subquery_response(self, sql_query):
         post_response = {}
         if(sql_query[5]):
@@ -327,12 +329,8 @@ class ForumsCategoriesInfo(Resource):
         return response
 
 
-class ForumsSubcategoriesInfo(Resource):
-    def get(self, category_id):
-        return {'type': 'category'}
-
-
 class ForumsSubcategoryInfo(Resource):
+    method_decorators = [jwt_optional()]
     def construct_response(self, sql_query):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
@@ -366,12 +364,18 @@ class ForumsSubcategoryInfo(Resource):
         sql_string = "select *, categories.id, categories.title "
         sql_string += "from subcategories, categories "
         sql_string += "where subcategories.id = %s AND "
-        sql_string += "categories.id = subcategories.category_id;"
+        sql_string += "categories.id = subcategories.category_id "
+        if(current_identity and current_identity.group in GROUP_VERIFIED):
+            sql_string += ";"
+        else:
+            sql_string += "and categories.restricted = false;"
         psql_cursor.execute(
             sql_string,
             (subcategory_id,)
         )
         forum_subcategory = psql_cursor.fetchone()
+        if(not forum_subcategory):
+            abort(404, message="Subcategory was not found.")
         return self.construct_response(forum_subcategory)
 
 
@@ -380,15 +384,15 @@ class ForumsSubcategoryThreads(Resource):
         user_thread = {
             'type': 'user',
             'id': sql_query[5],
-            'username': sql_query[6],
-            'group': sql_query[12]
+            'username': sql_query[7],
+            'group': sql_query[13]
         }
         user_post = {
             'type': 'user',
-            'id': sql_query[8],
-            'username': sql_query[9],
-            'avatar': sql_query[10],
-            'group': sql_query[11]
+            'id': sql_query[9],
+            'username': sql_query[10],
+            'avatar': sql_query[11],
+            'group': sql_query[12]
         }
         return {
             'type': 'thread',
@@ -399,32 +403,33 @@ class ForumsSubcategoryThreads(Resource):
             'sticky': sql_query[4],
             'user_thread': user_thread,
             'user_post': user_post,
-            'post_count': get_post_count(sql_query[0]),
-            'posts_timestamp': sql_query[7].isoformat(),
+            'post_count': sql_query[6],
+            'posts_timestamp': sql_query[8].isoformat(),
         }
 
     def get_thread(self, subcategory_id, thread_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         offset = int(thread_id)-1 #0 indexed
-        sql_string = "select threads.id, threads.title, threads.timestamp, "
-        sql_string += "threads.locked, threads.sticky, threads.user_id, "
+        sql_string = "select T.id, T.title, T.timestamp, "
+        sql_string += "T.locked, T.sticky, T.user_id, "
+        sql_string += "T.count, "
         sql_string += "t_users.username, posts.timestamp, "
         sql_string += "posts.user_id, p_users.username , p_users.avatar, "
         sql_string += "g_posts.name, g_threads.name "
-        sql_string += "from threads, posts, "
+        sql_string += "from threads_post_counts as T, posts, "
         sql_string += "users as t_users, users as p_users, "
         sql_string += "groups as g_threads, groups as g_posts where "
-        sql_string += "threads.subcategory_id = %s and "
-        sql_string += "threads.id = posts.thread_id and "
+        sql_string += "T.subcategory_id = %s and "
+        sql_string += "T.id = posts.thread_id and "
         sql_string += "posts.id = ("
         sql_string += "select max (id) from posts where "
-        sql_string += "posts.thread_id = threads.id) "
-        sql_string += "and t_users.id = threads.user_id and "
+        sql_string += "posts.thread_id = T.id) "
+        sql_string += "and t_users.id = T.user_id and "
         sql_string += "p_users.id = posts.user_id and "
         sql_string += "g_posts.id = p_users.group_id and "
         sql_string += "g_threads.id = t_users.group_id "
-        sql_string += "order by threads.sticky desc, posts.timestamp desc "
+        sql_string += "order by T.sticky desc, posts.timestamp desc "
         sql_string += "limit 1 "
         sql_string += "offset %s;"
         psql_cursor.execute(
@@ -443,24 +448,25 @@ class ForumsSubcategoryThreads(Resource):
     def get_threads(self, subcategory_id, thread_min, thread_max):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select threads.id, threads.title, threads.timestamp, "
-        sql_string += "threads.locked, threads.sticky, threads.user_id, "
+        sql_string = "select T.id, T.title, T.timestamp, "
+        sql_string += "T.locked, T.sticky, T.user_id, "
+        sql_string += "T.count, "
         sql_string += "t_users.username, posts.timestamp, "
         sql_string += "posts.user_id, p_users.username , p_users.avatar, "
         sql_string += "g_posts.name, g_threads.name "
-        sql_string += "from threads, posts, "
+        sql_string += "from threads_post_counts as T, posts, "
         sql_string += "users as t_users, users as p_users, "
         sql_string += "groups as g_threads, groups as g_posts where "
-        sql_string += "threads.subcategory_id = %s and "
-        sql_string += "threads.id = posts.thread_id and "
+        sql_string += "T.subcategory_id = %s and "
+        sql_string += "T.id = posts.thread_id and "
         sql_string += "posts.id = ("
         sql_string += "select max (id) from posts where "
-        sql_string += "posts.thread_id = threads.id) "
-        sql_string += "and t_users.id = threads.user_id and "
+        sql_string += "posts.thread_id = T.id) "
+        sql_string += "and t_users.id = T.user_id and "
         sql_string += "p_users.id = posts.user_id and "
         sql_string += "g_posts.id = p_users.group_id and "
         sql_string += "g_threads.id = t_users.group_id "
-        sql_string += "order by threads.sticky desc, posts.timestamp desc "
+        sql_string += "order by T.sticky desc, posts.timestamp desc "
         sql_string += "limit %s "
         sql_string += "offset %s;"
         limit = (thread_max - thread_min) + 1
@@ -643,22 +649,23 @@ class ForumsModifyThread(Resource):
 
 
 class ForumsThread(ValidatorResource):
+    method_decorators = [jwt_optional()]
     def construct_response(self, sql_query):
         user = {
             'type': 'user',
-            'id': sql_query[5],
-            'username': sql_query[6],
-            'group': sql_query[7]
+            'id': sql_query[6],
+            'username': sql_query[7],
+            'group': sql_query[8]
         }
         subcategory = {
             'type': 'subcategory',
-            'id': sql_query[8],
-            'title': sql_query[9]
+            'id': sql_query[9],
+            'title': sql_query[10]
         }
         category = {
             'type': 'category',
-            'id': sql_query[10],
-            'title': sql_query[11]
+            'id': sql_query[11],
+            'title': sql_query[12]
         }
         return {
             'type': 'thread',
@@ -667,7 +674,7 @@ class ForumsThread(ValidatorResource):
             'timestamp': sql_query[2].isoformat(),
             'locked': sql_query[3],
             'sticky': sql_query[4],
-            'post_count': get_post_count(sql_query[0]),
+            'post_count': sql_query[5],
             'user': user,
             'subcategory': subcategory,
             'category': category
@@ -676,18 +683,22 @@ class ForumsThread(ValidatorResource):
     def get(self, thread_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        sql_string = "select threads.id, threads.title, threads.timestamp, "
-        sql_string += "threads.locked, threads.sticky, "
+        sql_string = "select T.id, T.title, T.timestamp, "
+        sql_string += "T.locked, T.sticky, T.count, "
         sql_string += "users_post_counts.id, users_post_counts.username, "
         sql_string += "users_post_counts.name, "
         sql_string += "subcategories.id, subcategories.title, "
         sql_string += "categories.id, categories.title FROM "
-        sql_string += "threads, users_post_counts, "
+        sql_string += "threads_post_counts AS T, users_post_counts, "
         sql_string += "subcategories, categories "
-        sql_string += "where threads.id = %s and "
-        sql_string += "users_post_counts.id = threads.user_id and "
-        sql_string += "subcategories.id = threads.subcategory_id and "
-        sql_string += "categories.id = subcategories.category_id;"
+        sql_string += "where T.id = %s and "
+        sql_string += "users_post_counts.id = T.user_id and "
+        sql_string += "subcategories.id = T.subcategory_id and "
+        sql_string += "categories.id = subcategories.category_id "
+        if(current_identity and current_identity.group in GROUP_VERIFIED):
+            sql_string += ";"
+        else:
+            sql_string += "and categories.restricted = false;"
         psql_cursor.execute(
             sql_string,
             (thread_id,)
@@ -975,10 +986,6 @@ posts_required_fields = ([[
 api.add_resource(
     ForumsCategoriesInfo,
     '/forums/categories'
-)
-api.add_resource(
-    ForumsSubcategoriesInfo,
-    '/forums/categories/<int:category_id>'
 )
 api.add_resource(
     ForumsSubcategoryInfo,
