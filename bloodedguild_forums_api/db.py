@@ -48,7 +48,8 @@ class DatabaseAuth():
 
     def check_auth(self, username, password):
         psql_cursor = self.db.get_cursor()
-        sql_string = "select id, username, name from users_post_counts "
+        sql_string = "select id, username, name, privilege "
+        sql_string += "from users_post_counts "
         sql_string += "where username = %s"
         sql_string += "and password_hash = crypt(%s, password_hash);"
         psql_cursor.execute(
