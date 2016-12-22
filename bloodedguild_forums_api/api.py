@@ -25,8 +25,6 @@ if(not testing):
 else:
     from bloodedguild_forums_api.testing_config import config
 
-GROUP_ADMINISTRATORS = ["gm", "dev"]
-GROUP_VERIFIED = ["gm", "dev", "verified"]
 app = Flask(__name__)
 blizzard_client = BlizzardClient(
     blizzard["realm"],
@@ -310,7 +308,7 @@ class ForumsCategoriesInfo(Resource):
         psql_cursor = db.get_cursor()
         sql_string = "select * from categories where restricted=false "
         if(current_identity):
-            if(current_identity.group in GROUP_VERIFIED):
+            if(current_identity.privilege > 0):
                 sql_string = "select * from categories "
         sql_string += "order by id;"
         psql_cursor.execute(
@@ -365,7 +363,7 @@ class ForumsSubcategoryInfo(Resource):
         sql_string += "from subcategories, categories "
         sql_string += "where subcategories.id = %s AND "
         sql_string += "categories.id = subcategories.category_id "
-        if(current_identity and current_identity.group in GROUP_VERIFIED):
+        if(current_identity and current_identity.privilege > 0):
             sql_string += ";"
         else:
             sql_string += "and categories.restricted = false;"
@@ -594,7 +592,7 @@ class ForumsModifyThread(Resource):
 
     def patch(self, thread_id):
         json_data = self.validate_json(request.get_json())
-        if(current_identity.group not in GROUP_ADMINISTRATORS):
+        if(current_identity.privilege < 2):
             abort(
                 403,
                 message="Error: This is for administrators only."
@@ -622,7 +620,7 @@ class ForumsModifyThread(Resource):
         }
 
     def delete(self, thread_id):
-        if(current_identity.group not in GROUP_ADMINISTRATORS):
+        if(current_identity.privilege < 2):
             abort(
                 403,
                 message="Error: This is for administrators only."
@@ -695,7 +693,7 @@ class ForumsThread(ValidatorResource):
         sql_string += "users_post_counts.id = T.user_id and "
         sql_string += "subcategories.id = T.subcategory_id and "
         sql_string += "categories.id = subcategories.category_id "
-        if(current_identity and current_identity.group in GROUP_VERIFIED):
+        if(current_identity and current_identity.privilege > 0):
             sql_string += ";"
         else:
             sql_string += "and categories.restricted = false;"
