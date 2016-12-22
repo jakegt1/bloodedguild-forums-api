@@ -709,6 +709,8 @@ class ForumsThread(ValidatorResource):
         response = []
         if(forum_thread):
             response = [self.construct_response(forum_thread)]
+        else:
+            abort(404, message="Thread didn't exist")
         return response
 
 
