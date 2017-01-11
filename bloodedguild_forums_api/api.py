@@ -79,7 +79,7 @@ class ValidatorResource(Resource):
 
 class DefaultLocation(Resource):
     def get(self):
-        return {'info': 'Bloodedguild forums test wow api. Do not touch! wow!'}
+        return {'info': 'Bloodedguild forums api. Do not touch! wow!'}
 
 
 class ForumsUser(Resource):
