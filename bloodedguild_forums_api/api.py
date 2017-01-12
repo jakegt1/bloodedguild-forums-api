@@ -754,6 +754,7 @@ class ForumsAddPost(ValidatorResource):
         }
 
 class ForumsLatestPosts(Resource):
+    method_decorators = [jwt_optional()]
     def construct_response(self, sql_query):
         user = {
             'type': 'user',
@@ -783,9 +784,13 @@ class ForumsLatestPosts(Resource):
         sql_string += "U.id, U.username, U.avatar, U.name, "
         sql_string += "T.id, T.title "
         sql_string += "from posts as P, users_post_counts as U, "
-        sql_string += "threads as T "
+        sql_string += "threads as T, subcategories as SC, categories as C "
         sql_string += "where P.thread_id = T.id and "
-        sql_string += "U.id = P.user_id "
+        sql_string += "U.id = P.user_id and "
+        sql_string += "T.subcategory_id = SC.id and "
+        sql_string += "SC.category_id = C.id "
+        if(not (current_identity and current_identity.privilege > 0) ):
+            sql_string += "and C.restricted = false "
         sql_string += "order by P.id desc "
         sql_string += "limit %s; "
         psql_cursor.execute(
