@@ -788,7 +788,10 @@ class ForumsLatestPosts(Resource):
         sql_string += "where P.thread_id = T.id and "
         sql_string += "U.id = P.user_id and "
         sql_string += "T.subcategory_id = SC.id and "
-        sql_string += "SC.category_id = C.id "
+        sql_string += "SC.category_id = C.id and "
+        sql_string += "P.id = ("
+        sql_string += "select max(id) from posts where "
+        sql_string += "posts.thread_id = T.id) "
         if(not (current_identity and current_identity.privilege > 0) ):
             sql_string += "and C.restricted = false "
         sql_string += "order by P.id desc "
