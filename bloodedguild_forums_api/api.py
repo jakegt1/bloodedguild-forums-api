@@ -203,7 +203,7 @@ class ForumsAddUser(ValidatorResource):
         if(not regex_user_name.match(user_name)):
             abort(400, message="Error: Username had bad characters.")
 
-    def put(self):
+    def post(self):
         json_data = self.validate_json(request.get_json())
         self.validate_user_name(json_data['username'])
         db = DatabaseConnector()
@@ -518,7 +518,7 @@ class ForumsInfo(Resource):
 
 class ForumsAddThread(ValidatorResource):
     method_decorators = [jwt_required()]
-    def put(self, subcategory_id):
+    def post(self, subcategory_id):
         json_data = self.validate_json(request.get_json())
         if(not json_data["title"]):
             abort(401, message="Error: Title is blank.")
@@ -714,7 +714,7 @@ class ForumsThread(ValidatorResource):
 
 class ForumsAddPost(ValidatorResource):
     method_decorators = [jwt_required()]
-    def put(self, thread_id):
+    def post(self, thread_id):
         json_data = self.validate_json(request.get_json())
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
