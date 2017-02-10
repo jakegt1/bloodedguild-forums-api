@@ -11,7 +11,7 @@ acceptable_elements = ['a', 'abbr', 'acronym', 'address', 'area', 'b', 'big',
 
 acceptable_attributes = ['abbr', 'accept', 'accept-charset', 'accesskey',
   'action', 'align', 'alt', 'axis', 'border', 'cellpadding', 'cellspacing',
-  'char', 'charoff', 'charset', 'checked', 'cite', 'clear', 'cols',
+  'char', 'charoff', 'charset', 'checked', 'cite', 'clear', 'cols', 'class',
   'colspan', 'color', 'compact', 'coords', 'datetime', 'dir',
   'enctype', 'for', 'headers', 'height', 'href', 'hreflang', 'hspace',
   'id', 'ismap', 'label', 'lang', 'longdesc', 'maxlength', 'method',
