@@ -1,7 +1,6 @@
-import psycopg2
 from datetime import timedelta
 from functools import wraps
-from flask import Flask, jsonify, request, make_response, current_app
+from flask import jsonify, current_app
 from flask_restful import Resource
 from flask_jwt import (
     JWT,
@@ -15,9 +14,11 @@ from bloodedguild_forums_api.db import (
     DatabaseConnector
 )
 
+
 class AuthRefresh(Resource):
     jwt = None
     method_decorators = [jwt_required()]
+
     def get(self):
         token = self.jwt.jwt_encode_callback(current_identity)
         return {
@@ -28,14 +29,18 @@ class AuthRefresh(Resource):
             'access_token': token.decode('utf-8')
         }
 
+
 class User(object):
+
     def __init__(self, id, username, group, privilege):
         self.id = id
         self.username = username
         self.group = group
         self.privilege = privilege
 
+
 class JWTConstructor():
+
     def __init__(self, app, secret_key):
         app.config['SECRET_KEY'] = secret_key
         app.config['JWT_EXPIRATION_DELTA'] = timedelta(weeks=1)
@@ -87,6 +92,7 @@ class JWTConstructor():
                 }
             )
         return jwt_response_handler
+
 
 def jwt_optional(realm=None):
     def wrapper(fn):

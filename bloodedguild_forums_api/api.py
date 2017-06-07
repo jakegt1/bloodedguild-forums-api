@@ -1,21 +1,11 @@
-from functools import wraps
-from flask import Flask, jsonify, request, make_response
+from flask import Flask, request
 from flask_jwt import jwt_required, current_identity
 from flask_restful import Resource, Api, abort
-from datetime import datetime, timedelta
-import sqlite3 as sql
 import re
-import sys
-import hashlib
 import psycopg2
 from threading import Timer
-from psycopg2.extras import DictCursor
 from bloodedguild_forums_api.clean_html import clean_html
-from bloodedguild_forums_api.db import (
-    DatabaseAuth,
-    DatabaseConnector,
-    DatabaseStringConstructor
-)
+from bloodedguild_forums_api.db import DatabaseConnector
 from bloodedguild_forums_api.jwt_util import jwt_optional
 from bloodedguild_forums_api.blizzard import BlizzardClient
 testing = False
@@ -33,15 +23,17 @@ blizzard_client = BlizzardClient(
 )
 api = Api(app)
 
-#There has to be a better way to do this.
 current_timer = None
+
 
 def start_timer():
     blizzard_client.store_guild_progress()
     current_timer = Timer(86400, start_timer)
     current_timer.start()
 
+
 start_timer()
+
 
 def get_post_count(thread_id):
     db = DatabaseConnector()
@@ -57,7 +49,9 @@ def get_post_count(thread_id):
     db.close()
     return post_count
 
+
 class ValidatorResource(Resource):
+
     def __init__(self, required_fields=[]):
         super().__init__()
         self.required_fields = required_fields
@@ -70,19 +64,21 @@ class ValidatorResource(Resource):
         if(missing_fields):
             error_string = "The JSON data was missing the following fields:"
             for field in missing_fields:
-                error_string += field+","
-                error_string = error_string[:-1] #trim last comma
+                error_string += field + ","
+                error_string = error_string[:-1]  # trim last comma
                 abort(400, message=error_string)
         else:
             return json_data
 
 
 class DefaultLocation(Resource):
+
     def get(self):
         return {'info': 'Bloodedguild forums api. Do not touch! wow!'}
 
 
 class ForumsUser(Resource):
+
     def get(self, user_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
@@ -117,7 +113,9 @@ class ForumsUser(Resource):
 
 
 class ForumsModifyUser(Resource):
+
     method_decorators = [jwt_required()]
+
     def validate_json(self, json_data):
         if(not json_data):
             abort(400, message="JSON data was empty.")
@@ -128,9 +126,9 @@ class ForumsModifyUser(Resource):
                 bad_fields.append(field)
         if(bad_fields):
             error_string = "The JSON data had the following bad fields:"
-            for field in missing_fields:
-                error_string += field+","
-                error_string = error_string[:-1] #trim last comma
+            for field in bad_fields:
+                error_string += field + ","
+                error_string = error_string[:-1]  # trim last comma
                 abort(400, message=error_string)
         else:
             return json_data
@@ -172,7 +170,6 @@ class ForumsModifyUser(Resource):
                 break
         if(not from_allowed_site):
             abort(400, message="Error: avatar link was from bad site.")
-            regex = re.compile(r'^http[s]?:\\/\\/')
         subbed_link = re.sub(r'^http[s]?:\/\/', '', link)
         return subbed_link
 
@@ -193,6 +190,7 @@ class ForumsModifyUser(Resource):
 
 
 class ForumsAddUser(ValidatorResource):
+
     def validate_user_name(self, user_name):
         regex_user_name = re.compile(r'^[0-9a-zA-Z_]+$')
         if(len(user_name) > 30):
@@ -248,6 +246,7 @@ class ForumsAddUser(ValidatorResource):
 
 class ForumsCategoriesInfo(Resource):
     method_decorators = [jwt_optional()]
+
     def construct_subquery_response(self, sql_query):
         post_response = {}
         if(sql_query[5]):
@@ -296,11 +295,11 @@ class ForumsCategoriesInfo(Resource):
         psql_cursor.close()
         db.close()
         return {
-                'type': 'category',
-                'id': sql_query[0],
-                'title': sql_query[1],
-                'description': sql_query[2],
-                'subcategories': forum_subcategories
+            'type': 'category',
+            'id': sql_query[0],
+            'title': sql_query[1],
+            'description': sql_query[2],
+            'subcategories': forum_subcategories
         }
 
     def get(self):
@@ -329,6 +328,7 @@ class ForumsCategoriesInfo(Resource):
 
 class ForumsSubcategoryInfo(Resource):
     method_decorators = [jwt_optional()]
+
     def construct_response(self, sql_query):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
@@ -378,6 +378,7 @@ class ForumsSubcategoryInfo(Resource):
 
 
 class ForumsSubcategoryThreads(Resource):
+
     def construct_response(self, sql_query):
         user_thread = {
             'type': 'user',
@@ -408,7 +409,7 @@ class ForumsSubcategoryThreads(Resource):
     def get_thread(self, subcategory_id, thread_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        offset = int(thread_id)-1 #0 indexed
+        offset = int(thread_id) - 1  # 0 indexed
         sql_string = "select T.id, T.title, T.timestamp, "
         sql_string += "T.locked, T.sticky, T.user_id, "
         sql_string += "T.count, "
@@ -468,7 +469,7 @@ class ForumsSubcategoryThreads(Resource):
         sql_string += "limit %s "
         sql_string += "offset %s;"
         limit = (thread_max - thread_min) + 1
-        offset = thread_min-1 #0 indexed
+        offset = thread_min - 1  # 0 indexed
         psql_cursor.execute(
             sql_string,
             (
@@ -503,13 +504,14 @@ class ForumsSubcategoryThreads(Resource):
                 )
             else:
                 error_message = "Minimum ID given was larger than Maximum ID."
-                abort(400, message="Error:"+error_message)
+                abort(400, message="Error:" + error_message)
         else:
             abort(400, message="Error: thread id did not match regex")
         return response
 
 
 class ForumsInfo(Resource):
+
     def get(self):
         return {
             'type': 'forums',
@@ -518,6 +520,7 @@ class ForumsInfo(Resource):
 
 class ForumsAddThread(ValidatorResource):
     method_decorators = [jwt_required()]
+
     def post(self, subcategory_id):
         json_data = self.validate_json(request.get_json())
         if(not json_data["title"]):
@@ -573,6 +576,7 @@ class ForumsAddThread(ValidatorResource):
 
 class ForumsModifyThread(Resource):
     method_decorators = [jwt_required()]
+
     def validate_json(self, json_data):
         if(not json_data):
             abort(400, message="JSON data was empty.")
@@ -583,9 +587,9 @@ class ForumsModifyThread(Resource):
                 bad_fields.append(field)
         if(bad_fields):
             error_string = "The JSON data had the following bad fields:"
-            for field in missing_fields:
-                error_string += field+","
-                error_string = error_string[:-1] #trim last comma
+            for field in bad_fields:
+                error_string += field + ","
+                error_string = error_string[:-1]  # trim last comma
                 abort(400, message=error_string)
         else:
             return json_data
@@ -600,7 +604,7 @@ class ForumsModifyThread(Resource):
         db = DatabaseConnector()
         json_key = list(json_data.keys())[0]
         json_value = json_data[json_key]
-        sql_string = "update threads set ("+ json_key + ") = (%s) where "
+        sql_string = "update threads set (" + json_key + ") = (%s) where "
         sql_string += "threads.id = %s;"
         psql_cursor = db.get_cursor()
         try:
@@ -645,9 +649,9 @@ class ForumsModifyThread(Resource):
         }
 
 
-
 class ForumsThread(ValidatorResource):
     method_decorators = [jwt_optional()]
+
     def construct_response(self, sql_query):
         user = {
             'type': 'user',
@@ -714,6 +718,7 @@ class ForumsThread(ValidatorResource):
 
 class ForumsAddPost(ValidatorResource):
     method_decorators = [jwt_required()]
+
     def post(self, thread_id):
         json_data = self.validate_json(request.get_json())
         db = DatabaseConnector()
@@ -753,8 +758,10 @@ class ForumsAddPost(ValidatorResource):
             'post_id': new_post_id
         }
 
+
 class ForumsLatestPosts(Resource):
     method_decorators = [jwt_optional()]
+
     def construct_response(self, sql_query):
         user = {
             'type': 'user',
@@ -792,7 +799,7 @@ class ForumsLatestPosts(Resource):
         sql_string += "P.id = ("
         sql_string += "select max(id) from posts where "
         sql_string += "posts.thread_id = T.id) "
-        if(not (current_identity and current_identity.privilege > 0) ):
+        if(not (current_identity and current_identity.privilege > 0)):
             sql_string += "and C.restricted = false "
         sql_string += "order by P.id desc "
         sql_string += "limit %s; "
@@ -808,6 +815,7 @@ class ForumsLatestPosts(Resource):
 
 
 class ForumsPost(Resource):
+
     def construct_response(self, sql_query):
         user = {
             'type': 'user',
@@ -830,7 +838,7 @@ class ForumsPost(Resource):
     def get_post(self, thread_id, post_id):
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
-        offset = int(post_id)-1 #offset is 0 indexed
+        offset = int(post_id) - 1  # offset is 0 indexed
         sql_string = "select P.id, P.content, P.timestamp, "
         sql_string += "P.edited_timestamp, U.id, U.username, U.avatar, "
         sql_string += "U.count, U.name, U.signature "
@@ -898,16 +906,18 @@ class ForumsPost(Resource):
                 )
             else:
                 error_message = "Minimum ID given was larger than Maximum ID."
-                abort(400, message="Error: "+error_message)
+                abort(400, message="Error: " + error_message)
         else:
             abort(400, message="Error: post id did not match regex")
         return response
 
+
 class ForumsModifyPost(ValidatorResource):
     method_decorators = [jwt_required()]
+
     def patch(self, thread_id, post_id):
         json_data = self.validate_json(request.get_json())
-        offset = int(post_id)-1 #0 indexed
+        offset = int(post_id) - 1  # 0 indexed
         db = DatabaseConnector()
         psql_cursor = db.get_cursor()
         sql_string = "select posts.id, posts.user_id from posts "
@@ -956,13 +966,16 @@ class ForumsModifyPost(ValidatorResource):
         db.close()
         return {
             "type": "post",
-            "id" : true_post_id,
+            "id": true_post_id,
             "status": "updated"
         }
 
+
 class ForumsProgress(Resource):
+
     def get(self):
         return blizzard_client.progress
+
 
 @app.after_request
 def after_request(response):
@@ -976,6 +989,7 @@ def after_request(response):
         'GET,PUT,POST,DELETE,PATCH'
     )
     return response
+
 
 api.add_resource(DefaultLocation, '/')
 blizzard_required_fields = ([["secret"]])
@@ -1012,7 +1026,7 @@ api.add_resource(
     '/forums/subcategories/<int:subcategory_id>',
     resource_class_args=threads_required_fields
 )
-api.add_resource(ForumsInfo,'/forums')
+api.add_resource(ForumsInfo, '/forums')
 api.add_resource(ForumsThread, '/forums/threads/<int:thread_id>')
 api.add_resource(
     ForumsAddPost,

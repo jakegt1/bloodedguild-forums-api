@@ -1,7 +1,9 @@
 import psycopg2
 from psycopg2.extras import DictCursor
 
+
 class DatabaseStringConstructor():
+
     def __init__(self, db_name, user, password):
         self.db_name = db_name
         self.user = user
@@ -9,9 +11,9 @@ class DatabaseStringConstructor():
 
     def __str__(self):
         conn_string = "host='localhost' "
-        conn_string +="dbname='"+self.db_name+"' "
-        conn_string +="user='"+self.user+"' "
-        conn_string +="password='"+self.password+"' "
+        conn_string += "dbname='" + self.db_name + "' "
+        conn_string += "user='" + self.user + "' "
+        conn_string += "password='" + self.password + "' "
         return conn_string
 
 
@@ -43,6 +45,7 @@ class DatabaseConnector():
 
 
 class DatabaseAuth():
+
     def __init__(self):
         self.db = DatabaseConnector()
 
@@ -60,4 +63,3 @@ class DatabaseAuth():
         psql_cursor.close()
         self.db.close()
         return query_result
-

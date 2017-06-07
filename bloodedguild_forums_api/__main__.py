@@ -19,7 +19,11 @@ DatabaseConnector.db_string_constructor = DatabaseStringConstructor(
 jwt_object = JWTConstructor(app, config["secret"])
 jwt = jwt_object.create_jwt()
 response_handler = jwt_object.get_response_handler()
+
+
 @jwt.auth_response_handler
 def jwt_response_handler(access_token, identity):
     return response_handler(access_token, identity)
+
+
 app.run(debug=True)

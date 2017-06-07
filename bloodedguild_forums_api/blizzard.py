@@ -1,5 +1,6 @@
 import requests
 
+
 class BlizzardClient():
 
     def __init__(self, realm, apikey, character_name):
@@ -51,13 +52,13 @@ class BlizzardClient():
         raids = json["progression"]["raids"]
         progression = {}
         for raid in raids:
-            if(raid["bosses"][0].get("mythicKills") != None):
+            if(raid["bosses"][0].get("mythicKills") is not None):
                 progression[raid["name"]] = self.produce_raid_obj(raid)
         return progression
 
     def store_guild_progress(self):
         uri = "https://eu.api.battle.net/wow/character/"
-        uri += self.realm+"/"+self.char
+        uri += self.realm + "/" + self.char
         req_params = {
             "locale": "en_GB",
             "fields": "progression",
@@ -71,5 +72,3 @@ class BlizzardClient():
             response = {"error": "Failed to work. Bad api key?"}
         self.progress = response
         return response
-
-
