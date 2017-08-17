@@ -14,7 +14,6 @@ from bloodedguild_forums_api.clean_html import clean_html
 from bloodedguild_forums_api.db import (
     DatabaseAuth,
     DatabaseConnector,
-    DatabaseStringConstructor
 )
 from bloodedguild_forums_api.jwt_util import jwt_optional
 from bloodedguild_forums_api.blizzard import BlizzardClient

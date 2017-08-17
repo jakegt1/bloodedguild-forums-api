@@ -1,7 +1,5 @@
 from bloodedguild_forums_api.api import app
-from bloodedguild_forums_api.db import (
-    DatabaseConnector,
-)
+from bloodedguild_forums_api.db import DatabaseConnector
 from bloodedguild_forums_api.jwt_util import JWTConstructor
 testing = False
 if(not testing):
