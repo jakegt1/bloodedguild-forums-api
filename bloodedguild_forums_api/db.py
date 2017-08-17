@@ -1,25 +1,16 @@
 import psycopg2
 from psycopg2.extras import DictCursor
 
-class DatabaseStringConstructor():
-    def __init__(self, db_name, user, password):
-        self.db_name = db_name
-        self.user = user
-        self.password = password
-
-    def __str__(self):
-        conn_string = "host='localhost' "
-        conn_string +="dbname='"+self.db_name+"' "
-        conn_string +="user='"+self.user+"' "
-        conn_string +="password='"+self.password+"' "
-        return conn_string
-
 
 class DatabaseConnector():
-    db_string_constructor = None
+    db_settings = {}
 
     def __init__(self):
         self.open()
+
+    @classmethod
+    def add_settings(cls, settings):
+        cls.db_settings = settings
 
     def get_conn_string(self):
         return str(self.db_string_constructor)
@@ -37,8 +28,8 @@ class DatabaseConnector():
 
     def open(self):
         self.connection = psycopg2.connect(
-            self.get_conn_string(),
-            cursor_factory=DictCursor
+            cursor_factory=DictCursor,
+            **self.db_settings
         )
 
 
