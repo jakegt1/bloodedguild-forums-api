@@ -16,7 +16,6 @@ from bloodedguild_forums_api.db import (
     DatabaseConnector,
 )
 from bloodedguild_forums_api.jwt_util import jwt_optional
-from bloodedguild_forums_api.blizzard import BlizzardClient
 testing = False
 from bloodedguild_forums_api.config import blizzard
 if(not testing):
@@ -25,11 +24,6 @@ else:
     from bloodedguild_forums_api.testing_config import config
 
 app = Flask(__name__)
-blizzard_client = BlizzardClient(
-    blizzard["realm"],
-    blizzard["apikey"],
-    blizzard["character"]
-)
 api = Api(app)
 
 def get_post_count(thread_id):
@@ -949,9 +943,6 @@ class ForumsModifyPost(ValidatorResource):
             "status": "updated"
         }
 
-class ForumsProgress(Resource):
-    def get(self):
-        return blizzard_client.progress
 
 @app.after_request
 def after_request(response):
@@ -967,7 +958,6 @@ def after_request(response):
     return response
 
 api.add_resource(DefaultLocation, '/')
-blizzard_required_fields = ([["secret"]])
 threads_required_fields = ([["title", "content"]])
 posts_required_fields = ([["content"]])
 users_required_fields = ([[
@@ -1033,10 +1023,6 @@ api.add_resource(
 api.add_resource(
     ForumsLatestPosts,
     '/forums/posts/<int:amount>'
-)
-api.add_resource(
-    ForumsProgress,
-    '/forums/progress'
 )
 if __name__ == '__main__':
     app.run(debug=True)
