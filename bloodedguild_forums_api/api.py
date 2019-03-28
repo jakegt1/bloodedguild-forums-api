@@ -32,16 +32,6 @@ blizzard_client = BlizzardClient(
 )
 api = Api(app)
 
-#There has to be a better way to do this.
-current_timer = None
-
-def start_timer():
-    blizzard_client.store_guild_progress()
-    current_timer = Timer(86400, start_timer)
-    current_timer.start()
-
-start_timer()
-
 def get_post_count(thread_id):
     db = DatabaseConnector()
     psql_cursor = db.get_cursor()
